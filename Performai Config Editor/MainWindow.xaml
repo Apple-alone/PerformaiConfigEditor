@@ -1,0 +1,244 @@
+﻿<Window x:Class="Performai_Config_Editor.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Performai Config Editor" Height="400" Width="750">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- 工具栏 -->
+        <ToolBar Grid.Row="0">
+            <Button Content="打开" Click="OpenFile_Click"/>
+            <Button Content="保存" Click="SaveFile_Click"/>
+            <Separator/>
+            <Label Content="版本:"/>
+            <ComboBox x:Name="VersionComboBox" Width="120" SelectionChanged="VersionComboBox_SelectionChanged"/>
+            <CheckBox x:Name="AdvancedModeCheckBox" Content="高级模式" Margin="10,0,0,0"
+                     Checked="AdvancedModeCheckBox_Checked" Unchecked="AdvancedModeCheckBox_Unchecked"/>
+        </ToolBar>
+
+        <!-- 主内容区域 -->
+        <TabControl x:Name="MainTabControl" Grid.Row="1">
+            <!-- AIME设置 -->
+            <TabItem Header="AIME">
+                <ScrollViewer>
+                    <StackPanel Margin="10">
+                        <GroupBox Header="AIME 设置">
+                            <StackPanel>
+                                <CheckBox x:Name="AimeEnableCheckBox" Content="启用AIME虚拟读卡器" Margin="5"/>
+                                <Grid Margin="0,5,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Label Content="卡号文件路径:"/>
+                                    <TextBox x:Name="AimePathTextBox" Grid.Column="1" Margin="5,0"/>
+                                    <Button Content="浏览..." Grid.Column="2" Click="BrowseAimeFile_Click"/>
+                                </Grid>
+                                <Label Content="卡号内容:" Margin="0,10,0,0"/>
+                                <TextBox x:Name="CardContentTextBox" Height="20" AcceptsReturn="True" Margin="5"/>
+                                <Button Content="保存卡号" HorizontalAlignment="Left" Margin="5" Click="SaveCardFile_Click"/>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- 网络设置 -->
+            <TabItem Header="网络">
+                <ScrollViewer>
+                    <StackPanel Margin="10">
+                        <GroupBox Header="DNS 设置">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Label Content="默认服务器:"/>
+                                    <ComboBox x:Name="ServerComboBox" Grid.Column="1" Margin="5" SelectionChanged="ServerComboBox_SelectionChanged"/>
+                                </Grid>
+                                <Grid x:Name="CustomServerGrid" Margin="0,5,0,0" Visibility="Collapsed">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Label Content="自定义地址:"/>
+                                    <TextBox x:Name="CustomServerTextBox" Grid.Column="1" Margin="5"/>
+                                </Grid>
+                                <Grid Margin="0,5,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Label Content="AimeDB服务器:"/>
+                                    <TextBox x:Name="AimeDbTextBox" Grid.Column="1" Margin="5"/>
+                                </Grid>
+                                <Grid Margin="0,5,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Label Content="备用DNS (可选):"/>
+                                    <TextBox x:Name="RouterDnsTextBox" Grid.Column="1" Margin="5" Text="223.5.5.5"/>
+                                </Grid>
+                                <CheckBox x:Name="NetEnvEnableCheckBox" Content="启用网络环境模拟" Margin="5" IsChecked="True"/>
+                                <TextBlock x:Name="ServerHelpTextBlock" Margin="5" TextWrapping="Wrap" Foreground="Blue"/>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- KeyChip设置 -->
+            <TabItem Header="KeyChip">
+                <ScrollViewer>
+                    <StackPanel Margin="10">
+                        <GroupBox Header="KeyChip 设置">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Label Content="KeyChip ID (必填):"/>
+                                    <TextBox x:Name="KeyChipIdTextBox" Grid.Column="1" Margin="5"/>
+                                </Grid>
+                                <Grid Margin="0,5,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Label Content="游戏ID:"/>
+                                    <TextBox x:Name="GameIdTextBox" Grid.Column="1" Margin="5" IsReadOnly="True"/>
+                                </Grid>
+                                <Grid Margin="0,5,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Label Content="子网地址:"/>
+                                    <TextBox x:Name="SubnetTextBox" Grid.Column="1" Margin="5" Text="192.168.1.0"/>
+                                </Grid>
+                                <Button Content="获取KeyChip帮助" HorizontalAlignment="Left" Margin="5" Click="ShowKeyChipHelp_Click"/>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- SDHD专用设置 -->
+            <TabItem x:Name="SdhdTab" Header="SDHD专用" Visibility="Collapsed">
+                <ScrollViewer>
+                    <StackPanel Margin="10">
+                        <GroupBox Header="控制器设置">
+                            <StackPanel>
+                                <ComboBox x:Name="SdhdControllerCombo" Margin="5">
+                                    <ComboBoxItem>默认</ComboBoxItem>
+                                    <ComboBoxItem>YubiDeck</ComboBoxItem>
+                                    <ComboBoxItem>TASOLLER</ComboBoxItem>
+                                    <ComboBoxItem>Brokenithm</ComboBoxItem>
+                                </ComboBox>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <GroupBox Header="红外传感器" Margin="0,10,0,0">
+                            <CheckBox x:Name="IrEnableCheckBox" Content="启用独立红外传感器" Margin="5"/>
+                        </GroupBox>
+
+                        <GroupBox Header="YubiDeck设置" Margin="0,10,0,0">
+                            <StackPanel>
+                                <TextBlock Text="侧边灯颜色:" Margin="5,5,5,0"/>
+                                <StackPanel Orientation="Horizontal" Margin="5">
+                                    <TextBlock Text="红:" Width="30"/>
+                                    <Slider x:Name="YbRedSlider" Minimum="0" Maximum="255" Width="100" Value="0"/>
+                                    <TextBlock Text="绿:" Width="30" Margin="10,0,0,0"/>
+                                    <Slider x:Name="YbGreenSlider" Minimum="0" Maximum="255" Width="100" Value="255"/>
+                                    <TextBlock Text="蓝:" Width="30" Margin="10,0,0,0"/>
+                                    <Slider x:Name="YbBlueSlider" Minimum="0" Maximum="255" Width="100" Value="0"/>
+                                </StackPanel>
+                                <CheckBox x:Name="YbRandomCheckBox" Content="随机颜色" Margin="5"/>
+                                <CheckBox x:Name="YbRealAimeCheckBox" Content="使用真实Aime卡ID" Margin="5" IsChecked="True"/>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- SDDT专用设置 -->
+            <TabItem x:Name="SddtTab" Header="SDDT专用" Visibility="Collapsed">
+                <ScrollViewer>
+                    <StackPanel Margin="10">
+                        <GroupBox Header="LED设置">
+                            <StackPanel>
+                                <CheckBox x:Name="LedEnableCheckBox" Content="启用LED控制" Margin="5" IsChecked="True"/>
+                                <RadioButton x:Name="LedPipeRadio" Content="命名管道输出" Margin="5,2" GroupName="LedOutput" IsChecked="True"/>
+                                <RadioButton x:Name="LedSerialRadio" Content="串口输出" Margin="5,2" GroupName="LedOutput"/>
+
+                                <StackPanel x:Name="SerialSettingsPanel" Margin="20,5,5,5" Visibility="Collapsed">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="串口:" VerticalAlignment="Center"/>
+                                        <TextBox x:Name="SerialPortTextBox" Grid.Column="1" Margin="5" Text="COM5"/>
+                                    </Grid>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="波特率:" VerticalAlignment="Center"/>
+                                        <TextBox x:Name="SerialBaudTextBox" Grid.Column="1" Margin="5" Text="921600"/>
+                                    </Grid>
+                                </StackPanel>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <GroupBox Header="Unity设置" Margin="0,10,0,0">
+                            <StackPanel>
+                                <CheckBox x:Name="UnityEnableCheckBox" Content="启用Unity钩子" Margin="5" IsChecked="True"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="目标程序集:" VerticalAlignment="Center"/>
+                                    <TextBox x:Name="TargetAssemblyTextBox" Grid.Column="1" Margin="5"/>
+                                </Grid>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- 高级编辑 -->
+            <TabItem x:Name="AdvancedTab" Header="高级编辑" Visibility="Collapsed">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBox x:Name="AdvancedEditorTextBox" Grid.Row="0" AcceptsReturn="True" 
+                            VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" FontFamily="Consolas"/>
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="加载当前配置" Margin="5" Click="LoadToAdvanced_Click"/>
+                        <Button Content="应用更改" Margin="5" Click="ApplyAdvanced_Click"/>
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+        </TabControl>
+
+        <!-- 状态栏 -->
+        <StatusBar Grid.Row="2">
+            <StatusBarItem>
+                <TextBlock x:Name="StatusTextBlock"/>
+            </StatusBarItem>
+        </StatusBar>
+    </Grid>
+</Window>

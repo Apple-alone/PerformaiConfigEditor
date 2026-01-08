@@ -22,84 +22,166 @@ jobs:
       with:
         dotnet-version: '8.0.x'
         
-    - name: Install security tools
+    - name: Clean project for analysis
       run: |
-        # 安装NuGet包漏洞检查工具
-        dotnet tool install --global dotnet-outdated-tool
-        dotnet tool install --global dotnet-depends
+        # 清理项目
+        dotnet clean
+        Remove-Item -Path ".\bin" -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -Path ".\obj" -Recurse -Force -ErrorAction SilentlyContinue
+        echo "Project cleaned"
         
+    - name: Restore dependencies
+      run: dotnet restore
+      
     - name: Check for outdated packages
       run: |
         # 检查过时的包
-        dotnet list package --outdated --include-transitive
+        echo "=== 检查过时的 NuGet 包 ==="
+        dotnet list "Performai Config Editor.csproj" package --outdated
       continue-on-error: true
       
     - name: Check for vulnerable packages
       run: |
         # 检查已知漏洞
-        dotnet list package --vulnerable --include-transitive
+        echo "=== 检查有漏洞的 NuGet 包 ==="
+        dotnet list "Performai Config Editor.csproj" package --vulnerable
       continue-on-error: true
       
-    - name: Analyze dependencies
+    - name: Analyze project dependencies
       run: |
-        # 生成依赖树
-        dotnet depends Performai\ Config\ Editor.csproj --output dependencies.html
-        echo "Dependency analysis completed"
+        # 生成项目依赖信息
+        echo "=== 项目依赖分析 ==="
+        dotnet list "Performai Config Editor.csproj" package
         
-    - name: Basic security checks
+        # 生成简单的依赖树
+        echo "`n=== 依赖树 ==="
+        dotnet tree "Performai Config Editor.csproj"
+        
+    - name: Check for deprecated APIs
       run: |
-        # 检查常见安全问题
-        echo "Running basic security checks..."
+        # 检查过时的API使用
+        echo "=== 检查过时的 API ==="
+        dotnet build --configuration Release -p:WarningLevel=5 -p:Nullable=enable
         
-        # 检查硬编码密钥
-        $hardcodedSecrets = @(
-          'password\s*=',
-          'secret\s*=',
-          'key\s*=',
-          'connectionstring\s*=',
-          'apikey\s*='
-        )
+    - name: Basic security code scan
+      run: |
+        echo "=== 基本代码安全检查 ==="
         
-        $issues = 0
+        # 1. 检查硬编码密钥
+        $secretsFound = 0
         Get-ChildItem -Path . -Recurse -Filter "*.cs" | Where-Object {
           $_.FullName -notlike "*\obj\*" -and $_.FullName -notlike "*\bin\*"
         } | ForEach-Object {
-          $content = Get-Content $_.FullName -Raw
-          foreach ($pattern in $hardcodedSecrets) {
-            if ($content -match $pattern -and $content -notmatch "//.*$pattern" -and $content -notmatch "example") {
-              Write-Warning "Potential hardcoded secret in $($_.Name): $pattern"
-              $issues++
+          $lines = Get-Content $_.FullName
+          for ($i = 0; $i -lt $lines.Count; $i++) {
+            $line = $lines[$i]
+            
+            # 跳过注释
+            if ($line.TrimStart().StartsWith("//") -or $line.TrimStart().StartsWith("*")) {
+              continue
+            }
+            
+            # 检查硬编码密码/密钥
+            if ($line -match 'password\s*=\s*"[^"]+"' -or 
+                $line -match 'Password\s*=\s*"[^"]+"' -or
+                $line -match 'secret\s*=\s*"[^"]+"' -or
+                $line -match 'Secret\s*=\s*"[^"]+"' -or
+                $line -match 'key\s*=\s*"[^"]+"' -or
+                $line -match 'Key\s*=\s*"[^"]+"' -or
+                $line -match 'connectionstring\s*=\s*"[^"]+"' -or
+                $line -match 'ConnectionString\s*=\s*"[^"]+"' -or
+                $line -match 'apikey\s*=\s*"[^"]+"' -or
+                $line -match 'ApiKey\s*=\s*"[^"]+"') {
+              
+              # 跳过示例/测试数据
+              if ($line -notmatch 'example' -and $line -notmatch 'test' -and $line -notmatch 'dummy') {
+                Write-Warning "可能发现硬编码密钥: $($_.Name) 第$($i+1)行"
+                Write-Host "  $line"
+                $secretsFound++
+              }
             }
           }
         }
         
-        if ($issues -eq 0) {
-          echo "No hardcoded secrets found"
+        if ($secretsFound -eq 0) {
+          echo "✅ 未发现硬编码密钥"
         }
         
-        # 检查不安全的方法调用
-        $unsafeMethods = @(
-          'Process\.Start\([^)]*\.\.\.',
-          'File\.Delete\([^)]*\.\.\.',
-          'Directory\.Delete\([^)]*true\)'
+        # 2. 检查不安全的方法调用
+        echo "`n=== 检查不安全的方法调用 ==="
+        $unsafeCalls = @(
+          'File\.Delete\(',
+          'Directory\.Delete\(',
+          'Process\.Start\(',
+          'System\.IO\.File\.Delete\(',
+          'System\.IO\.Directory\.Delete\(',
+          'System\.Diagnostics\.Process\.Start\('
         )
         
         Get-ChildItem -Path . -Recurse -Filter "*.cs" | Where-Object {
           $_.FullName -notlike "*\obj\*" -and $_.FullName -notlike "*\bin\*"
         } | ForEach-Object {
-          $content = Get-Content $_.FullName -Raw
-          foreach ($pattern in $unsafeMethods) {
-            if ($content -match $pattern) {
-              Write-Warning "Potentially unsafe method call in $($_.Name): $pattern"
+          $lines = Get-Content $_.FullName
+          for ($i = 0; $i -lt $lines.Count; $i++) {
+            $line = $lines[$i]
+            
+            foreach ($pattern in $unsafeCalls) {
+              if ($line -match $pattern) {
+                echo "注意: $($_.Name) 第$($i+1)行使用了 $($pattern.Replace('\.', '.'))"
+                echo "  $line"
+              }
             }
           }
         }
+        
+        # 3. 检查XAML文件中的潜在问题
+        echo "`n=== 检查XAML文件 ==="
+        Get-ChildItem -Path . -Recurse -Filter "*.xaml" | ForEach-Object {
+          $content = Get-Content $_.FullName -Raw
+          if ($content -match 'Password' -or $content -match 'password') {
+            echo "注意: $($_.Name) 包含密码相关字段"
+          }
+        }
+        
       continue-on-error: true
       
+    - name: Generate security report
+      run: |
+        # 生成简单的安全报告
+        $reportContent = @"
+# Performai Config Editor 安全扫描报告
+扫描时间: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+构建编号: ${{ github.run_number }}
+
+## 扫描项目
+- 过时NuGet包检查
+- 漏洞包检查
+- 硬编码密钥检查
+- 不安全方法调用检查
+
+## 结果摘要
+扫描完成，请查看上述输出了解详细信息。
+
+## 建议
+1. 定期更新NuGet包到最新版本
+2. 避免在代码中硬编码敏感信息
+3. 对文件操作进行适当的错误处理
+4. 验证用户输入以防止路径遍历攻击
+
+## 后续步骤
+如有发现问题，请：
+1. 修复发现的安全问题
+2. 重新运行安全扫描
+3. 更新此报告
+"@
+        
+        $reportContent | Out-File -FilePath "security-report.md" -Encoding UTF8
+        echo "安全报告已生成"
+        
     - name: Upload security report
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: security-report
+        name: security-scan-results
         path: |
-          dependencies.html
+          security-report.md

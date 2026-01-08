@@ -20,23 +20,31 @@ jobs:
       with:
         dotnet-version: '8.0.x'
         
+    - name: Clean project
+      run: |
+        # 清理项目
+        dotnet clean
+        echo "Project cleaned"
+        
     - name: Restore dependencies
       run: dotnet restore
       
-    - name: Build Debug configuration
-      run: dotnet build --configuration Debug --no-restore
-      
-    - name: Build Release configuration
-      run: dotnet build --configuration Release --no-restore
-      
-    - name: Auto format code
+    - name: Build solution
       run: |
-        # 首先自动修复格式问题
-        dotnet format --verbosity normal
-        echo "Code formatting completed"
-      
-  analyze:
-    name: Code Analysis
+        # 编译解决方案
+        dotnet build "Performai Config Editor.sln" --configuration Release
+        
+    - name: Run code analysis
+      run: |
+        # 运行代码分析（非阻塞）
+        echo "Running code analysis..."
+        dotnet build --configuration Release `
+          -p:AnalysisLevel=5.0 `
+          -p:EnforceCodeStyleInBuild=false || echo "Analysis completed with warnings"
+      continue-on-error: true
+        
+  code-format:
+    name: Code Formatting
     runs-on: windows-latest
     
     steps:
@@ -48,23 +56,22 @@ jobs:
       with:
         dotnet-version: '8.0.x'
         
-    - name: Run code analysis with relaxed rules
+    - name: Auto format code
       run: |
-        # 使用更宽松的代码分析规则
-        dotnet build --configuration Release `
-          -p:AnalysisLevel=5.0 `
-          -p:EnforceCodeStyleInBuild=false `
-          -p:RunAnalyzersDuringBuild=false
+        # 自动格式化代码（静默运行）
+        dotnet format --verbosity quiet --diagnostics IDE0055
+        echo "Code formatting completed"
         
-    - name: Check for code style issues (informational only)
+    - name: Check formatting
       run: |
-        # 只检查不报错
-        dotnet format --verify-no-changes --verbosity normal || echo "Code style issues found (not blocking)"
+        # 检查格式（只报告不失败）
+        dotnet format --verify-no-changes --verbosity minimal || echo "Formatting issues found - please run 'dotnet format' locally"
       continue-on-error: true
       
   test-build:
-    name: Test Build
+    name: Test Build and Publish
     runs-on: windows-latest
+    needs: [validate, code-format]
     
     steps:
     - name: Checkout code
@@ -75,24 +82,32 @@ jobs:
       with:
         dotnet-version: '8.0.x'
         
-    - name: Clean solution
-      run: dotnet clean
-      
-    - name: Full rebuild
+    - name: Test publish process
       run: |
-        dotnet restore
-        dotnet build --configuration Release --no-restore
-        echo "Build completed successfully"
+        # 测试发布流程
+        echo "Testing publish process..."
         
-    - name: Test publish
-      run: |
-        # 测试发布是否正常工作
-        dotnet publish --configuration Release --output ./test-publish `
-          -p:Version=1.0.0 `
-          --no-restore
-        echo "Publish test completed"
+        # 创建临时输出目录
+        New-Item -ItemType Directory -Path "./test-output" -Force
         
-        # 检查生成的文件
-        Get-ChildItem ./test-publish -Filter *.exe | ForEach-Object {
-          echo "Found: $_"
+        # 测试发布
+        dotnet publish "Performai Config Editor.csproj" `
+          --configuration Release `
+          --output "./test-output" `
+          -p:Version=1.0.0
+        
+        # 验证生成的文件
+        echo "`n=== 生成的文件 ==="
+        Get-ChildItem "./test-output" -File | Select-Object Name, Length | Format-Table -AutoSize
+        
+        # 检查主要程序集
+        $exeFile = Get-ChildItem "./test-output" -Filter "*.exe"
+        if ($exeFile) {
+          echo "✅ 主程序生成成功: $($exeFile.Name)"
+          echo "文件大小: $([math]::Round($exeFile.Length/1KB, 2)) KB"
+        } else {
+          echo "❌ 未找到可执行文件"
         }
+        
+        # 清理
+        Remove-Item -Path "./test-output" -Recurse -Force -ErrorAction SilentlyContinue

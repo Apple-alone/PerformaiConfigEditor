@@ -1,4 +1,4 @@
-name: Build and Release WPF Application
+name: Build and Release
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
       version:
         description: '发布版本号 (例如: 1.0.0)'
         required: true
-        default: '1.0.0'
+        default: '2.0.0'
       prerelease:
         description: '是否为预发布版本'
         type: boolean
@@ -33,38 +33,37 @@ jobs:
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
         
-    - name: Auto format code before build
+    - name: Auto format code
       run: |
         # 自动格式化代码
-        dotnet format --verbosity normal
-        echo "Code formatting completed"
+        dotnet format --verbosity minimal
+        echo "Code formatted"
         
     - name: Determine Version
       id: version
       run: |
         if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == refs/tags/* ]]; then
-          # 从标签获取版本
           TAG_NAME="${GITHUB_REF#refs/tags/}"
           VERSION="${TAG_NAME#v}"
         else
-          # 手动触发，使用输入版本
           VERSION="${{ github.event.inputs.version }}"
         fi
         
-        # 清理版本号
         VERSION=$(echo $VERSION | sed 's/^v//')
         
         echo "VERSION=$VERSION" >> $GITHUB_ENV
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         
-        echo "Version: $VERSION"
+        echo "Building version: $VERSION"
         
     - name: Restore dependencies
-      run: dotnet restore
-      
+      run: |
+        dotnet restore "Performai Config Editor.sln"
+        
     - name: Build application
       run: |
-        dotnet build --configuration ${{ env.CONFIGURATION }} `
+        dotnet build "Performai Config Editor.sln" `
+          --configuration ${{ env.CONFIGURATION }} `
           -p:Version=${{ env.VERSION }} `
           -p:FileVersion=${{ env.VERSION }} `
           -p:AssemblyVersion=${{ env.VERSION }} `
@@ -72,14 +71,14 @@ jobs:
         
     - name: Publish application
       run: |
-        # 创建发布目录
+        # 创建输出目录
         New-Item -ItemType Directory -Path "./artifacts" -Force
         
         # 发布应用程序
-        dotnet publish --configuration ${{ env.CONFIGURATION }} `
+        dotnet publish "Performai Config Editor.csproj" `
+          --configuration ${{ env.CONFIGURATION }} `
           -p:Version=${{ env.VERSION }} `
           -p:FileVersion=${{ env.VERSION }} `
-          -p:AssemblyVersion=${{ env.VERSION }} `
           --output "./artifacts/${{ env.PROJECT_NAME }}" `
           --no-restore
         
@@ -89,13 +88,41 @@ jobs:
           -DestinationPath "./artifacts/$zipName" `
           -Force
         
-        echo "Build completed successfully"
-        echo "ZIP file: $zipName"
+        echo "✅ Build completed"
+        echo "📦 ZIP file: $zipName"
+        
+    - name: Create simple release notes
+      run: |
+        # 创建简单的发布说明
+        $releaseNotes = @"
+# ${{ env.PROJECT_NAME }} ${{ env.VERSION }}
+
+## 系统要求
+- Windows 10 或更高版本
+- [.NET 8.0 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)
+
+## 安装说明
+1. 下载并解压 ZIP 文件
+2. 运行 `${{ env.PROJECT_NAME }}.exe`
+
+## 文件列表
+- `${{ env.PROJECT_NAME }}.exe` - 主程序
+- 各种 DLL 文件 - 依赖库
+- `*.config` - 配置文件
+
+## 验证
+启动程序后，检查状态栏显示的版本信息。
+
+---
+*Build: ${{ github.run_number }} | Date: $(Get-Date -Format 'yyyy-MM-dd')*
+"@
+        
+        $releaseNotes | Out-File -FilePath "./artifacts/RELEASE_NOTES.md" -Encoding UTF8
         
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: build-output
+        name: build-artifacts
         path: |
           ./artifacts/
         retention-days: 90
@@ -110,15 +137,14 @@ jobs:
     - name: Download artifacts
       uses: actions/download-artifact@v4
       with:
-        name: build-output
-        path: ./release-files
+        name: build-artifacts
+        path: ./release
         
     - name: Setup release info
       id: release_info
       run: |
         if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == refs/tags/* ]]; then
           TAG_NAME="${{ github.ref_name }}"
-          # 检查是否为预发布版本
           if [[ "$TAG_NAME" == *"-alpha"* || "$TAG_NAME" == *"-beta"* || "$TAG_NAME" == *"-rc"* ]]; then
             PRERELEASE="true"
           else
@@ -132,13 +158,15 @@ jobs:
         echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
         echo "prerelease=$PRERELEASE" >> $GITHUB_OUTPUT
         
+        echo "Creating release for tag: $TAG_NAME"
+        
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ steps.release_info.outputs.tag_name }}
         name: ${{ env.PROJECT_NAME }} ${{ steps.release_info.outputs.tag_name }}
+        body_path: ./release/RELEASE_NOTES.md
         prerelease: ${{ steps.release_info.outputs.prerelease == 'true' }}
         draft: false
-        generate_release_notes: true
         files: |
-          ./release-files/${{ env.PROJECT_NAME }}-*.zip
+          ./release/${{ env.PROJECT_NAME }}-*.zip

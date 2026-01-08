@@ -1,0 +1,105 @@
+name: Security Scan
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # 每周日运行
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+jobs:
+  security:
+    name: Security Analysis
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+        
+    - name: Install security tools
+      run: |
+        # 安装NuGet包漏洞检查工具
+        dotnet tool install --global dotnet-outdated-tool
+        dotnet tool install --global dotnet-depends
+        
+    - name: Check for outdated packages
+      run: |
+        # 检查过时的包
+        dotnet list package --outdated --include-transitive
+      continue-on-error: true
+      
+    - name: Check for vulnerable packages
+      run: |
+        # 检查已知漏洞
+        dotnet list package --vulnerable --include-transitive
+      continue-on-error: true
+      
+    - name: Analyze dependencies
+      run: |
+        # 生成依赖树
+        dotnet depends Performai\ Config\ Editor.csproj --output dependencies.html
+        echo "Dependency analysis completed"
+        
+    - name: Basic security checks
+      run: |
+        # 检查常见安全问题
+        echo "Running basic security checks..."
+        
+        # 检查硬编码密钥
+        $hardcodedSecrets = @(
+          'password\s*=',
+          'secret\s*=',
+          'key\s*=',
+          'connectionstring\s*=',
+          'apikey\s*='
+        )
+        
+        $issues = 0
+        Get-ChildItem -Path . -Recurse -Filter "*.cs" | Where-Object {
+          $_.FullName -notlike "*\obj\*" -and $_.FullName -notlike "*\bin\*"
+        } | ForEach-Object {
+          $content = Get-Content $_.FullName -Raw
+          foreach ($pattern in $hardcodedSecrets) {
+            if ($content -match $pattern -and $content -notmatch "//.*$pattern" -and $content -notmatch "example") {
+              Write-Warning "Potential hardcoded secret in $($_.Name): $pattern"
+              $issues++
+            }
+          }
+        }
+        
+        if ($issues -eq 0) {
+          echo "No hardcoded secrets found"
+        }
+        
+        # 检查不安全的方法调用
+        $unsafeMethods = @(
+          'Process\.Start\([^)]*\.\.\.',
+          'File\.Delete\([^)]*\.\.\.',
+          'Directory\.Delete\([^)]*true\)'
+        )
+        
+        Get-ChildItem -Path . -Recurse -Filter "*.cs" | Where-Object {
+          $_.FullName -notlike "*\obj\*" -and $_.FullName -notlike "*\bin\*"
+        } | ForEach-Object {
+          $content = Get-Content $_.FullName -Raw
+          foreach ($pattern in $unsafeMethods) {
+            if ($content -match $pattern) {
+              Write-Warning "Potentially unsafe method call in $($_.Name): $pattern"
+            }
+          }
+        }
+      continue-on-error: true
+      
+    - name: Upload security report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: security-report
+        path: |
+          dependencies.html

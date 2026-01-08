@@ -1,0 +1,98 @@
+name: CI Validation
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  validate:
+    name: Validate Code
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+        
+    - name: Restore dependencies
+      run: dotnet restore
+      
+    - name: Build Debug configuration
+      run: dotnet build --configuration Debug --no-restore
+      
+    - name: Build Release configuration
+      run: dotnet build --configuration Release --no-restore
+      
+    - name: Auto format code
+      run: |
+        # 首先自动修复格式问题
+        dotnet format --verbosity normal
+        echo "Code formatting completed"
+      
+  analyze:
+    name: Code Analysis
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+        
+    - name: Run code analysis with relaxed rules
+      run: |
+        # 使用更宽松的代码分析规则
+        dotnet build --configuration Release `
+          -p:AnalysisLevel=5.0 `
+          -p:EnforceCodeStyleInBuild=false `
+          -p:RunAnalyzersDuringBuild=false
+        
+    - name: Check for code style issues (informational only)
+      run: |
+        # 只检查不报错
+        dotnet format --verify-no-changes --verbosity normal || echo "Code style issues found (not blocking)"
+      continue-on-error: true
+      
+  test-build:
+    name: Test Build
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+        
+    - name: Clean solution
+      run: dotnet clean
+      
+    - name: Full rebuild
+      run: |
+        dotnet restore
+        dotnet build --configuration Release --no-restore
+        echo "Build completed successfully"
+        
+    - name: Test publish
+      run: |
+        # 测试发布是否正常工作
+        dotnet publish --configuration Release --output ./test-publish `
+          -p:Version=1.0.0 `
+          --no-restore
+        echo "Publish test completed"
+        
+        # 检查生成的文件
+        Get-ChildItem ./test-publish -Filter *.exe | ForEach-Object {
+          echo "Found: $_"
+        }

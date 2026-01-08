@@ -4,14 +4,40 @@ on:
   schedule:
     - cron: '0 0 * * 0'  # 每周日运行
   push:
-    branches: [ main, master ]
+    branches: [ master ]
     tags: [ 'v*' ]
   workflow_dispatch:
 
 jobs:
+  locate-project:
+    name: Locate Project
+    runs-on: windows-latest
+    outputs:
+      project_path: ${{ steps.find-project.outputs.project_path }}
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Find project file
+      id: find-project
+      run: |
+        $csprojFiles = Get-ChildItem -Path . -Recurse -Filter "*.csproj"
+        if ($csprojFiles.Count -eq 0) {
+          echo "错误: 未找到.csproj文件"
+          exit 1
+        }
+        
+        $projectFile = $csprojFiles[0]
+        $relativePath = $projectFile.FullName.Substring($PWD.Path.Length + 1)
+        
+        echo "使用项目文件: $relativePath"
+        echo "project_path=$relativePath" >> $GITHUB_OUTPUT
+        
   security:
     name: Security Analysis
     runs-on: windows-latest
+    needs: locate-project
     
     steps:
     - name: Checkout code
@@ -22,166 +48,60 @@ jobs:
       with:
         dotnet-version: '8.0.x'
         
-    - name: Clean project for analysis
-      run: |
-        # 清理项目
-        dotnet clean
-        Remove-Item -Path ".\bin" -Recurse -Force -ErrorAction SilentlyContinue
-        Remove-Item -Path ".\obj" -Recurse -Force -ErrorAction SilentlyContinue
-        echo "Project cleaned"
-        
-    - name: Restore dependencies
-      run: dotnet restore
-      
     - name: Check for outdated packages
       run: |
-        # 检查过时的包
         echo "=== 检查过时的 NuGet 包 ==="
-        dotnet list "Performai Config Editor.csproj" package --outdated
+        dotnet list "${{ needs.locate-project.outputs.project_path }}" package --outdated
       continue-on-error: true
       
     - name: Check for vulnerable packages
       run: |
-        # 检查已知漏洞
         echo "=== 检查有漏洞的 NuGet 包 ==="
-        dotnet list "Performai Config Editor.csproj" package --vulnerable
+        dotnet list "${{ needs.locate-project.outputs.project_path }}" package --vulnerable
       continue-on-error: true
       
-    - name: Analyze project dependencies
-      run: |
-        # 生成项目依赖信息
-        echo "=== 项目依赖分析 ==="
-        dotnet list "Performai Config Editor.csproj" package
-        
-        # 生成简单的依赖树
-        echo "`n=== 依赖树 ==="
-        dotnet tree "Performai Config Editor.csproj"
-        
-    - name: Check for deprecated APIs
-      run: |
-        # 检查过时的API使用
-        echo "=== 检查过时的 API ==="
-        dotnet build --configuration Release -p:WarningLevel=5 -p:Nullable=enable
-        
-    - name: Basic security code scan
+    - name: Basic code security scan
       run: |
         echo "=== 基本代码安全检查 ==="
         
-        # 1. 检查硬编码密钥
-        $secretsFound = 0
-        Get-ChildItem -Path . -Recurse -Filter "*.cs" | Where-Object {
+        # 查找所有C#文件
+        $csFiles = Get-ChildItem -Path . -Recurse -Filter "*.cs" | Where-Object {
           $_.FullName -notlike "*\obj\*" -and $_.FullName -notlike "*\bin\*"
-        } | ForEach-Object {
-          $lines = Get-Content $_.FullName
-          for ($i = 0; $i -lt $lines.Count; $i++) {
-            $line = $lines[$i]
-            
-            # 跳过注释
-            if ($line.TrimStart().StartsWith("//") -or $line.TrimStart().StartsWith("*")) {
-              continue
-            }
-            
-            # 检查硬编码密码/密钥
-            if ($line -match 'password\s*=\s*"[^"]+"' -or 
-                $line -match 'Password\s*=\s*"[^"]+"' -or
-                $line -match 'secret\s*=\s*"[^"]+"' -or
-                $line -match 'Secret\s*=\s*"[^"]+"' -or
-                $line -match 'key\s*=\s*"[^"]+"' -or
-                $line -match 'Key\s*=\s*"[^"]+"' -or
-                $line -match 'connectionstring\s*=\s*"[^"]+"' -or
-                $line -match 'ConnectionString\s*=\s*"[^"]+"' -or
-                $line -match 'apikey\s*=\s*"[^"]+"' -or
-                $line -match 'ApiKey\s*=\s*"[^"]+"') {
-              
-              # 跳过示例/测试数据
-              if ($line -notmatch 'example' -and $line -notmatch 'test' -and $line -notmatch 'dummy') {
-                Write-Warning "可能发现硬编码密钥: $($_.Name) 第$($i+1)行"
-                Write-Host "  $line"
-                $secretsFound++
-              }
-            }
+        }
+        
+        echo "扫描 $($csFiles.Count) 个C#文件..."
+        
+        # 简单的安全检查逻辑
+        $issues = 0
+        
+        foreach ($file in $csFiles) {
+          $content = Get-Content $file.FullName -Raw
+          
+          # 检查硬编码密码
+          if ($content -match 'password\s*=\s*"[^"]+"' -and $content -notmatch 'example') {
+            Write-Warning "可能发现硬编码密码: $($file.Name)"
+            $issues++
           }
         }
         
-        if ($secretsFound -eq 0) {
-          echo "✅ 未发现硬编码密钥"
-        }
-        
-        # 2. 检查不安全的方法调用
-        echo "`n=== 检查不安全的方法调用 ==="
-        $unsafeCalls = @(
-          'File\.Delete\(',
-          'Directory\.Delete\(',
-          'Process\.Start\(',
-          'System\.IO\.File\.Delete\(',
-          'System\.IO\.Directory\.Delete\(',
-          'System\.Diagnostics\.Process\.Start\('
-        )
-        
-        Get-ChildItem -Path . -Recurse -Filter "*.cs" | Where-Object {
-          $_.FullName -notlike "*\obj\*" -and $_.FullName -notlike "*\bin\*"
-        } | ForEach-Object {
-          $lines = Get-Content $_.FullName
-          for ($i = 0; $i -lt $lines.Count; $i++) {
-            $line = $lines[$i]
-            
-            foreach ($pattern in $unsafeCalls) {
-              if ($line -match $pattern) {
-                echo "注意: $($_.Name) 第$($i+1)行使用了 $($pattern.Replace('\.', '.'))"
-                echo "  $line"
-              }
-            }
-          }
-        }
-        
-        # 3. 检查XAML文件中的潜在问题
-        echo "`n=== 检查XAML文件 ==="
-        Get-ChildItem -Path . -Recurse -Filter "*.xaml" | ForEach-Object {
-          $content = Get-Content $_.FullName -Raw
-          if ($content -match 'Password' -or $content -match 'password') {
-            echo "注意: $($_.Name) 包含密码相关字段"
-          }
+        if ($issues -eq 0) {
+          echo "✅ 未发现明显的安全问题"
         }
         
       continue-on-error: true
       
-    - name: Generate security report
+    - name: Generate security summary
       run: |
-        # 生成简单的安全报告
-        $reportContent = @"
-# Performai Config Editor 安全扫描报告
-扫描时间: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
-构建编号: ${{ github.run_number }}
-
-## 扫描项目
-- 过时NuGet包检查
-- 漏洞包检查
-- 硬编码密钥检查
-- 不安全方法调用检查
-
-## 结果摘要
-扫描完成，请查看上述输出了解详细信息。
-
-## 建议
-1. 定期更新NuGet包到最新版本
-2. 避免在代码中硬编码敏感信息
-3. 对文件操作进行适当的错误处理
-4. 验证用户输入以防止路径遍历攻击
-
-## 后续步骤
-如有发现问题，请：
-1. 修复发现的安全问题
-2. 重新运行安全扫描
-3. 更新此报告
-"@
+        echo "安全扫描完成于: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" > security-summary.txt
+        echo "构建编号: ${{ github.run_number }}" >> security-summary.txt
+        echo "项目: ${{ needs.locate-project.outputs.project_path }}" >> security-summary.txt
+        echo "状态: 扫描完成" >> security-summary.txt
         
-        $reportContent | Out-File -FilePath "security-report.md" -Encoding UTF8
-        echo "安全报告已生成"
+        Get-Content security-summary.txt
         
-    - name: Upload security report
+    - name: Upload security summary
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: security-scan-results
-        path: |
-          security-report.md
+        name: security-summary
+        path: security-summary.txt

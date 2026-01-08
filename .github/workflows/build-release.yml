@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '发布版本号 (例如: 1.0.0)'
+        description: '发布版本号'
         required: true
         default: '2.0.0'
       prerelease:
@@ -20,9 +20,51 @@ env:
   PROJECT_NAME: 'Performai-Config-Editor'
   
 jobs:
+  locate-project:
+    name: Locate Project Files
+    runs-on: windows-latest
+    outputs:
+      project_path: ${{ steps.find-project.outputs.project_path }}
+      project_name: ${{ steps.find-project.outputs.project_name }}
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Find project file
+      id: find-project
+      run: |
+        echo "查找项目文件..."
+        
+        # 查找所有.csproj文件
+        $csprojFiles = Get-ChildItem -Path . -Recurse -Filter "*.csproj"
+        
+        if ($csprojFiles.Count -eq 0) {
+          echo "错误: 未找到.csproj文件"
+          exit 1
+        }
+        
+        # 使用第一个找到的项目文件
+        $projectFile = $csprojFiles[0]
+        $relativePath = $projectFile.FullName.Substring($PWD.Path.Length + 1)
+        
+        echo "找到项目文件: $($projectFile.Name)"
+        echo "完整路径: $($projectFile.FullName)"
+        echo "相对路径: $relativePath"
+        
+        # 提取项目名称（不带扩展名）
+        $projectName = $projectFile.BaseName
+        
+        echo "project_path=$relativePath" >> $GITHUB_OUTPUT
+        echo "project_name=$projectName" >> $GITHUB_OUTPUT
+        
+        echo "PROJECT_PATH=$relativePath" >> $env:GITHUB_ENV
+        echo "PROJECT_NAME=$projectName" >> $env:GITHUB_ENV
+        
   build:
     name: Build Application
     runs-on: windows-latest
+    needs: locate-project
     
     steps:
     - name: Checkout code
@@ -33,11 +75,16 @@ jobs:
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
         
+    - name: Display project info
+      run: |
+        echo "项目路径: ${{ needs.locate-project.outputs.project_path }}"
+        echo "项目名称: ${{ needs.locate-project.outputs.project_name }}"
+        
     - name: Auto format code
       run: |
-        # 自动格式化代码
+        echo "格式化代码..."
         dotnet format --verbosity minimal
-        echo "Code formatted"
+        echo "✅ 代码格式化完成"
         
     - name: Determine Version
       id: version
@@ -54,44 +101,68 @@ jobs:
         echo "VERSION=$VERSION" >> $GITHUB_ENV
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         
-        echo "Building version: $VERSION"
+        echo "构建版本: $VERSION"
         
     - name: Restore dependencies
       run: |
-        dotnet restore "Performai Config Editor.sln"
+        echo "恢复依赖..."
+        dotnet restore "${{ needs.locate-project.outputs.project_path }}"
         
     - name: Build application
       run: |
-        dotnet build "Performai Config Editor.sln" `
+        echo "构建应用程序..."
+        dotnet build "${{ needs.locate-project.outputs.project_path }}" `
           --configuration ${{ env.CONFIGURATION }} `
           -p:Version=${{ env.VERSION }} `
           -p:FileVersion=${{ env.VERSION }} `
-          -p:AssemblyVersion=${{ env.VERSION }} `
           --no-restore
+        
+        echo "✅ 构建成功"
         
     - name: Publish application
       run: |
+        echo "发布应用程序..."
+        
         # 创建输出目录
-        New-Item -ItemType Directory -Path "./artifacts" -Force
+        $artifactsDir = "./artifacts"
+        $outputDir = "$artifactsDir/${{ env.PROJECT_NAME }}"
+        
+        New-Item -ItemType Directory -Path $outputDir -Force
         
         # 发布应用程序
-        dotnet publish "Performai Config Editor.csproj" `
+        dotnet publish "${{ needs.locate-project.outputs.project_path }}" `
           --configuration ${{ env.CONFIGURATION }} `
           -p:Version=${{ env.VERSION }} `
           -p:FileVersion=${{ env.VERSION }} `
-          --output "./artifacts/${{ env.PROJECT_NAME }}" `
+          --output $outputDir `
           --no-restore
         
         # 创建ZIP包
         $zipName = "${{ env.PROJECT_NAME }}-${{ env.VERSION }}.zip"
-        Compress-Archive -Path "./artifacts/${{ env.PROJECT_NAME }}/*" `
-          -DestinationPath "./artifacts/$zipName" `
+        Compress-Archive -Path "$outputDir/*" `
+          -DestinationPath "$artifactsDir/$zipName" `
           -Force
         
-        echo "✅ Build completed"
-        echo "📦 ZIP file: $zipName"
+        echo "✅ 发布完成"
+        echo "📦 ZIP文件: $zipName"
         
-    - name: Create simple release notes
+        # 显示生成的文件信息
+        echo "`n=== 生成的文件列表 ==="
+        $exeFiles = Get-ChildItem $outputDir -Filter "*.exe"
+        if ($exeFiles.Count -gt 0) {
+          echo "可执行文件:"
+          foreach ($exe in $exeFiles) {
+            echo "  - $($exe.Name) ($([math]::Round($exe.Length/1KB, 2)) KB)"
+          }
+        }
+        
+        $totalFiles = (Get-ChildItem $outputDir -File -Recurse).Count
+        $totalSize = (Get-ChildItem $outputDir -File -Recurse | Measure-Object -Property Length -Sum).Sum
+        echo "`n📊 发布包统计:"
+        echo "  文件总数: $totalFiles"
+        echo "  总大小: $([math]::Round($totalSize/1MB, 2)) MB"
+        
+    - name: Create release notes
       run: |
         # 创建简单的发布说明
         $releaseNotes = @"
@@ -103,18 +174,18 @@ jobs:
 
 ## 安装说明
 1. 下载并解压 ZIP 文件
-2. 运行 `${{ env.PROJECT_NAME }}.exe`
+2. 运行 `${{ needs.locate-project.outputs.project_name }}.exe`
 
-## 文件列表
-- `${{ env.PROJECT_NAME }}.exe` - 主程序
-- 各种 DLL 文件 - 依赖库
-- `*.config` - 配置文件
+## 文件信息
+- 构建时间: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+- 构建编号: ${{ github.run_number }}
+- 项目名称: ${{ needs.locate-project.outputs.project_name }}
 
 ## 验证
 启动程序后，检查状态栏显示的版本信息。
 
 ---
-*Build: ${{ github.run_number }} | Date: $(Get-Date -Format 'yyyy-MM-dd')*
+*自动构建于 GitHub Actions*
 "@
         
         $releaseNotes | Out-File -FilePath "./artifacts/RELEASE_NOTES.md" -Encoding UTF8
@@ -128,9 +199,9 @@ jobs:
         retention-days: 90
         
   create-release:
-    name: Create Release
-    needs: [build]
+    name: Create GitHub Release
     runs-on: windows-latest
+    needs: [build]
     if: success()
     
     steps:
@@ -158,7 +229,7 @@ jobs:
         echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
         echo "prerelease=$PRERELEASE" >> $GITHUB_OUTPUT
         
-        echo "Creating release for tag: $TAG_NAME"
+        echo "创建发布: $TAG_NAME"
         
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
@@ -170,3 +241,4 @@ jobs:
         draft: false
         files: |
           ./release/${{ env.PROJECT_NAME }}-*.zip
+          ./release/RELEASE_NOTES.md

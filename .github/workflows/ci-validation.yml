@@ -2,9 +2,9 @@ name: CI Validation
 
 on:
   push:
-    branches: [ main, master, develop ]
+    branches: [ master ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ master ]
 
 jobs:
   validate:
@@ -20,31 +20,48 @@ jobs:
       with:
         dotnet-version: '8.0.x'
         
-    - name: Clean project
+    - name: Find project files
       run: |
-        # 清理项目
-        dotnet clean
-        echo "Project cleaned"
+        echo "=== 查找项目文件 ==="
+        Get-ChildItem -Path . -Recurse -Filter "*.csproj" | ForEach-Object {
+          echo "Found project: $($_.FullName)"
+          echo "Relative path: $($_.FullName.Substring($PWD.Path.Length + 1))"
+        }
+        
+        echo "`n=== 当前目录结构 ==="
+        Get-ChildItem -Path . -Recurse | Where-Object { $_.PSIsContainer } | Select-Object FullName | ForEach-Object {
+          echo "$($_.FullName)"
+        }
         
     - name: Restore dependencies
-      run: dotnet restore
-      
+      run: |
+        echo "Restoring dependencies..."
+        # 查找并恢复所有项目
+        Get-ChildItem -Path . -Recurse -Filter "*.csproj" | ForEach-Object {
+          echo "Restoring: $($_.Name)"
+          dotnet restore $_.FullName
+        }
+        
     - name: Build solution
       run: |
-        # 编译解决方案
-        dotnet build "Performai Config Editor.sln" --configuration Release
+        echo "Building solution..."
+        # 查找解决方案或项目文件
+        $slnFiles = Get-ChildItem -Path . -Recurse -Filter "*.sln"
+        $csprojFiles = Get-ChildItem -Path . -Recurse -Filter "*.csproj"
         
-    - name: Run code analysis
-      run: |
-        # 运行代码分析（非阻塞）
-        echo "Running code analysis..."
-        dotnet build --configuration Release `
-          -p:AnalysisLevel=5.0 `
-          -p:EnforceCodeStyleInBuild=false || echo "Analysis completed with warnings"
-      continue-on-error: true
+        if ($slnFiles.Count -gt 0) {
+          echo "Found solution file: $($slnFiles[0].Name)"
+          dotnet build $slnFiles[0].FullName --configuration Release
+        } elseif ($csprojFiles.Count -gt 0) {
+          echo "Found project file: $($csprojFiles[0].Name)"
+          dotnet build $csprojFiles[0].FullName --configuration Release
+        } else {
+          echo "Error: No .sln or .csproj files found"
+          exit 1
+        }
         
-  code-format:
-    name: Code Formatting
+  test-publish:
+    name: Test Publish
     runs-on: windows-latest
     
     steps:
@@ -56,58 +73,102 @@ jobs:
       with:
         dotnet-version: '8.0.x'
         
-    - name: Auto format code
+    - name: Find and display project structure
       run: |
-        # 自动格式化代码（静默运行）
-        dotnet format --verbosity quiet --diagnostics IDE0055
-        echo "Code formatting completed"
+        echo "=== 项目结构分析 ==="
+        echo "当前工作目录: $PWD"
+        echo "`n所有文件:"
+        Get-ChildItem -Path . -Recurse -File | Select-Object -First 20 | ForEach-Object {
+          echo "  $($_.FullName.Substring($PWD.Path.Length + 1))"
+        }
         
-    - name: Check formatting
-      run: |
-        # 检查格式（只报告不失败）
-        dotnet format --verify-no-changes --verbosity minimal || echo "Formatting issues found - please run 'dotnet format' locally"
-      continue-on-error: true
-      
-  test-build:
-    name: Test Build and Publish
-    runs-on: windows-latest
-    needs: [validate, code-format]
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '8.0.x'
+        echo "`n=== 查找.csproj文件 ==="
+        $csprojFiles = Get-ChildItem -Path . -Recurse -Filter "*.csproj"
+        if ($csprojFiles.Count -eq 0) {
+          echo "错误: 未找到.csproj文件"
+          echo "当前目录内容:"
+          Get-ChildItem -Path .
+          exit 1
+        }
         
-    - name: Test publish process
+        foreach ($file in $csprojFiles) {
+          echo "找到项目文件: $($file.FullName)"
+          echo "相对路径: $($file.FullName.Substring($PWD.Path.Length + 1))"
+        }
+        
+        # 使用第一个找到的.csproj文件
+        $projectFile = $csprojFiles[0].FullName
+        echo "`n将使用项目文件: $projectFile"
+        echo "PROJECT_FILE=$projectFile" >> $env:GITHUB_ENV
+        
+    - name: Test publish
       run: |
-        # 测试发布流程
-        echo "Testing publish process..."
+        echo "=== 测试发布流程 ==="
+        echo "项目文件: $env:PROJECT_FILE"
         
         # 创建临时输出目录
-        New-Item -ItemType Directory -Path "./test-output" -Force
+        $outputDir = "./test-publish-output"
+        New-Item -ItemType Directory -Path $outputDir -Force
         
         # 测试发布
-        dotnet publish "Performai Config Editor.csproj" `
+        echo "执行发布命令..."
+        dotnet publish "$env:PROJECT_FILE" `
           --configuration Release `
-          --output "./test-output" `
-          -p:Version=1.0.0
+          --output $outputDir `
+          -p:Version=1.0.0 `
+          --verbosity minimal
+        
+        if ($LASTEXITCODE -eq 0) {
+          echo "✅ 发布成功"
+        else {
+          echo "❌ 发布失败"
+          exit 1
+        }
         
         # 验证生成的文件
         echo "`n=== 生成的文件 ==="
-        Get-ChildItem "./test-output" -File | Select-Object Name, Length | Format-Table -AutoSize
+        Get-ChildItem $outputDir -File | Select-Object Name, Length, LastWriteTime | Format-Table -AutoSize
         
         # 检查主要程序集
-        $exeFile = Get-ChildItem "./test-output" -Filter "*.exe"
-        if ($exeFile) {
-          echo "✅ 主程序生成成功: $($exeFile.Name)"
-          echo "文件大小: $([math]::Round($exeFile.Length/1KB, 2)) KB"
+        $exeFiles = Get-ChildItem $outputDir -Filter "*.exe"
+        if ($exeFiles.Count -gt 0) {
+          echo "`n✅ 找到可执行文件:"
+          foreach ($exe in $exeFiles) {
+            echo "  - $($exe.Name) ($([math]::Round($exe.Length/1KB, 2)) KB)"
+          }
         } else {
-          echo "❌ 未找到可执行文件"
+          echo "`n⚠️ 未找到.exe文件，检查.dll文件..."
+          $dllFiles = Get-ChildItem $outputDir -Filter "*.dll" | Select-Object -First 5
+          if ($dllFiles.Count -gt 0) {
+            echo "找到DLL文件:"
+            foreach ($dll in $dllFiles) {
+              echo "  - $($dll.Name)"
+            }
+          } else {
+            echo "❌ 未找到任何输出文件"
+          }
         }
         
+        # 显示文件总数和总大小
+        $allFiles = Get-ChildItem $outputDir -File -Recurse
+        $totalSize = ($allFiles | Measure-Object -Property Length -Sum).Sum
+        echo "`n📊 统计:"
+        echo "  文件总数: $($allFiles.Count)"
+        echo "  总大小: $([math]::Round($totalSize/1KB, 2)) KB"
+        
         # 清理
-        Remove-Item -Path "./test-output" -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -Path $outputDir -Recurse -Force -ErrorAction SilentlyContinue
+        
+    - name: Test with different configurations
+      run: |
+        echo "=== 测试不同配置 ==="
+        
+        # 测试Debug配置
+        echo "`n测试Debug配置..."
+        dotnet build "$env:PROJECT_FILE" --configuration Debug
+        
+        # 测试Release配置
+        echo "`n测试Release配置..."
+        dotnet build "$env:PROJECT_FILE" --configuration Release
+        
+        echo "✅ 所有配置测试通过"

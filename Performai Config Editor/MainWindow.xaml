@@ -1,243 +1,544 @@
 ﻿<Window x:Class="Performai_Config_Editor.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Performai Config Editor" Height="400" Width="750">
+        Title="Performai Config Editor" Height="550" Width="900"
+        MinHeight="500" MinWidth="800"
+        WindowStartupLocation="CenterScreen"
+        Background="#FFF0F0F0">
+
+    <Window.Resources>
+        <!-- 定义颜色 -->
+        <Color x:Key="PrimaryColor">#FF2C3E50</Color>
+        <Color x:Key="SecondaryColor">#FF3498DB</Color>
+        <Color x:Key="AccentColor">#FFE74C3C</Color>
+        <Color x:Key="LightGray">#FFECF0F1</Color>
+        <Color x:Key="DarkGray">#FF7F8C8D</Color>
+
+        <!-- 转换为SolidColorBrush -->
+        <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource PrimaryColor}"/>
+        <SolidColorBrush x:Key="SecondaryBrush" Color="{StaticResource SecondaryColor}"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}"/>
+        <SolidColorBrush x:Key="LightGrayBrush" Color="{StaticResource LightGray}"/>
+        <SolidColorBrush x:Key="DarkGrayBrush" Color="{StaticResource DarkGray}"/>
+
+        <!-- 按钮样式 -->
+        <Style x:Key="ModernButton" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource PrimaryBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="{StaticResource DarkGrayBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="3">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{StaticResource SecondaryBrush}"/>
+                                <Setter Property="BorderBrush" Value="#FF2980B9"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Background" Value="#FF1A5276"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 工具栏按钮样式（稍小一些） -->
+        <Style x:Key="ToolBarButton" TargetType="Button" BasedOn="{StaticResource ModernButton}">
+            <Setter Property="Padding" Value="6,3"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+
+        <!-- 文本框样式 -->
+        <Style x:Key="ModernTextBox" TargetType="TextBox">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#FFBDC3C7"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="4"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="2">
+                            <ScrollViewer x:Name="PART_ContentHost"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 组合框样式 -->
+        <Style x:Key="ModernComboBox" TargetType="ComboBox">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#FFBDC3C7"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="4"/>
+            <Setter Property="Height" Value="24"/>
+        </Style>
+
+        <!-- 复选框样式 -->
+        <Style x:Key="ModernCheckBox" TargetType="CheckBox">
+            <Setter Property="Margin" Value="4"/>
+            <Setter Property="Foreground" Value="#FF2C3E50"/>
+        </Style>
+
+        <!-- 标签样式 -->
+        <Style x:Key="ModernLabel" TargetType="Label">
+            <Setter Property="Foreground" Value="#FF2C3E50"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Padding" Value="0,0,5,0"/>
+        </Style>
+
+        <!-- 分组框样式 -->
+        <Style x:Key="ModernGroupBox" TargetType="GroupBox">
+            <Setter Property="BorderBrush" Value="{StaticResource PrimaryBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Background" Value="{StaticResource LightGrayBrush}"/>
+            <Setter Property="Margin" Value="5"/>
+            <Setter Property="Padding" Value="8"/>
+            <Setter Property="HeaderTemplate">
+                <Setter.Value>
+                    <DataTemplate>
+                        <Border Background="{StaticResource PrimaryBrush}" 
+                                CornerRadius="3" 
+                                Padding="8,4">
+                            <TextBlock Text="{Binding}" 
+                                      Foreground="White" 
+                                      FontWeight="Bold"
+                                      VerticalAlignment="Center"/>
+                        </Border>
+                    </DataTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 选项卡样式 -->
+        <Style x:Key="ModernTabControl" TargetType="TabControl">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+
+        <Style x:Key="ModernTabItem" TargetType="TabItem">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border Name="Border" 
+                                Background="{StaticResource LightGrayBrush}"
+                                BorderBrush="{StaticResource PrimaryBrush}" 
+                                BorderThickness="1,1,1,0"
+                                CornerRadius="4,4,0,0"
+                                Margin="2,0">
+                            <ContentPresenter x:Name="ContentSite"
+                                              VerticalAlignment="Center"
+                                              HorizontalAlignment="Center"
+                                              ContentSource="Header"
+                                              Margin="10,6"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="{StaticResource PrimaryBrush}"/>
+                                <Setter TargetName="ContentSite" Property="TextElement.Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="#FF3498DB"/>
+                                <Setter TargetName="ContentSite" Property="TextElement.Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 工具栏样式 -->
+        <Style x:Key="ModernToolBar" TargetType="ToolBar">
+            <Setter Property="Background" Value="#FF34495E"/>
+            <Setter Property="Height" Value="38"/>
+        </Style>
+
+        <!-- 滑块样式 -->
+        <Style x:Key="ModernSlider" TargetType="Slider">
+            <Setter Property="Height" Value="20"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- 状态栏样式 -->
+        <Style x:Key="ModernStatusBar" TargetType="StatusBar">
+            <Setter Property="Background" Value="{StaticResource PrimaryBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Height" Value="28"/>
+        </Style>
+    </Window.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
+        <!-- 标题栏 -->
+        <Border Grid.Row="0" Background="{StaticResource PrimaryBrush}" Height="65">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0">
+                <TextBlock Text="🎮" FontSize="28" Margin="0,0,15,0"/>
+                <StackPanel>
+                    <TextBlock Text="Performai Config Editor" 
+                              Foreground="White" 
+                              FontSize="20" 
+                              FontWeight="Bold"/>
+                    <TextBlock Text="Performai系列音游配置文件可视化编辑器" 
+                              Foreground="#FFBDC3C7" 
+                              FontSize="12"
+                              Margin="0,2,0,0"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
         <!-- 工具栏 -->
-        <ToolBar Grid.Row="0">
-            <Button Content="打开" Click="OpenFile_Click"/>
-            <Button Content="保存" Click="SaveFile_Click"/>
-            <Separator/>
-            <Label Content="版本:"/>
-            <ComboBox x:Name="VersionComboBox" Width="120" SelectionChanged="VersionComboBox_SelectionChanged"/>
-            <CheckBox x:Name="AdvancedModeCheckBox" Content="高级模式" Margin="10,0,0,0"
-                     Checked="AdvancedModeCheckBox_Checked" Unchecked="AdvancedModeCheckBox_Unchecked"/>
-        </ToolBar>
+        <Border Grid.Row="1" Background="#FF2C3E50" Height="38">
+            <ToolBar Style="{StaticResource ModernToolBar}" 
+            VerticalAlignment="Stretch"
+            HorizontalAlignment="Stretch"
+            Background="Transparent">
+                <Button Content="📂 打开" Style="{StaticResource ToolBarButton}" Click="OpenFile_Click"/>
+                <Button Content="💾 保存" Style="{StaticResource ToolBarButton}" Click="SaveFile_Click"/>
+                <Separator/>
+                <Label Content="版本:" Foreground="White" VerticalAlignment="Center" Margin="5,0"/>
+                <ComboBox x:Name="VersionComboBox" Style="{StaticResource ModernComboBox}" 
+                 Width="120" Height="30" 
+                 SelectionChanged="VersionComboBox_SelectionChanged"/>
+                <CheckBox x:Name="AdvancedModeCheckBox" Content="查看源文件" 
+                 Foreground="White" Margin="15,0,0,0"
+                 VerticalAlignment="Center"
+                 ToolTip="查看和编辑配置文件源代码"
+                 Checked="AdvancedModeCheckBox_Checked" 
+                 Unchecked="AdvancedModeCheckBox_Unchecked"/>
+            </ToolBar>
+        </Border>
 
         <!-- 主内容区域 -->
-        <TabControl x:Name="MainTabControl" Grid.Row="1">
-            <!-- AIME设置 -->
-            <TabItem Header="AIME">
-                <ScrollViewer>
-                    <StackPanel Margin="10">
-                        <GroupBox Header="AIME 设置">
-                            <StackPanel>
-                                <CheckBox x:Name="AimeEnableCheckBox" Content="启用AIME虚拟读卡器" Margin="5"/>
-                                <Grid Margin="0,5,0,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Label Content="卡号文件路径:"/>
-                                    <TextBox x:Name="AimePathTextBox" Grid.Column="1" Margin="5,0"/>
-                                    <Button Content="浏览..." Grid.Column="2" Click="BrowseAimeFile_Click"/>
-                                </Grid>
-                                <Label Content="卡号内容:" Margin="0,10,0,0"/>
-                                <TextBox x:Name="CardContentTextBox" Height="20" AcceptsReturn="True" Margin="5"/>
-                                <Button Content="保存卡号" HorizontalAlignment="Left" Margin="5" Click="SaveCardFile_Click"/>
-                            </StackPanel>
-                        </GroupBox>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
-            <!-- 网络设置 -->
-            <TabItem Header="网络">
-                <ScrollViewer>
-                    <StackPanel Margin="10">
-                        <GroupBox Header="DNS 设置">
-                            <StackPanel>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Label Content="默认服务器:"/>
-                                    <ComboBox x:Name="ServerComboBox" Grid.Column="1" Margin="5" SelectionChanged="ServerComboBox_SelectionChanged"/>
-                                </Grid>
-                                <Grid x:Name="CustomServerGrid" Margin="0,5,0,0" Visibility="Collapsed">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Label Content="自定义地址:"/>
-                                    <TextBox x:Name="CustomServerTextBox" Grid.Column="1" Margin="5"/>
-                                </Grid>
-                                <Grid Margin="0,5,0,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Label Content="AimeDB服务器:"/>
-                                    <TextBox x:Name="AimeDbTextBox" Grid.Column="1" Margin="5"/>
-                                </Grid>
-                                <Grid Margin="0,5,0,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Label Content="备用DNS (可选):"/>
-                                    <TextBox x:Name="RouterDnsTextBox" Grid.Column="1" Margin="5" Text="223.5.5.5"/>
-                                </Grid>
-                                <CheckBox x:Name="NetEnvEnableCheckBox" Content="启用网络环境模拟" Margin="5" IsChecked="True"/>
-                                <TextBlock x:Name="ServerHelpTextBlock" Margin="5" TextWrapping="Wrap" Foreground="Blue"/>
-                            </StackPanel>
-                        </GroupBox>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
-            <!-- KeyChip设置 -->
-            <TabItem Header="KeyChip">
-                <ScrollViewer>
-                    <StackPanel Margin="10">
-                        <GroupBox Header="KeyChip 设置">
-                            <StackPanel>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Label Content="KeyChip ID (必填):"/>
-                                    <TextBox x:Name="KeyChipIdTextBox" Grid.Column="1" Margin="5"/>
-                                </Grid>
-                                <Grid Margin="0,5,0,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Label Content="游戏ID:"/>
-                                    <TextBox x:Name="GameIdTextBox" Grid.Column="1" Margin="5" IsReadOnly="True"/>
-                                </Grid>
-                                <Grid Margin="0,5,0,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Label Content="子网地址:"/>
-                                    <TextBox x:Name="SubnetTextBox" Grid.Column="1" Margin="5" Text="192.168.1.0"/>
-                                </Grid>
-                                <Button Content="获取KeyChip帮助" HorizontalAlignment="Left" Margin="5" Click="ShowKeyChipHelp_Click"/>
-                            </StackPanel>
-                        </GroupBox>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
-            <!-- SDHD专用设置 -->
-            <TabItem x:Name="SdhdTab" Header="SDHD专用" Visibility="Collapsed">
-                <ScrollViewer>
-                    <StackPanel Margin="10">
-                        <GroupBox Header="控制器设置">
-                            <StackPanel>
-                                <ComboBox x:Name="SdhdControllerCombo" Margin="5">
-                                    <ComboBoxItem>默认</ComboBoxItem>
-                                    <ComboBoxItem>YubiDeck</ComboBoxItem>
-                                    <ComboBoxItem>TASOLLER</ComboBoxItem>
-                                    <ComboBoxItem>Brokenithm</ComboBoxItem>
-                                </ComboBox>
-                            </StackPanel>
-                        </GroupBox>
-
-                        <GroupBox Header="红外传感器" Margin="0,10,0,0">
-                            <CheckBox x:Name="IrEnableCheckBox" Content="启用独立红外传感器" Margin="5"/>
-                        </GroupBox>
-
-                        <GroupBox Header="YubiDeck设置" Margin="0,10,0,0">
-                            <StackPanel>
-                                <TextBlock Text="侧边灯颜色:" Margin="5,5,5,0"/>
-                                <StackPanel Orientation="Horizontal" Margin="5">
-                                    <TextBlock Text="红:" Width="30"/>
-                                    <Slider x:Name="YbRedSlider" Minimum="0" Maximum="255" Width="100" Value="0"/>
-                                    <TextBlock Text="绿:" Width="30" Margin="10,0,0,0"/>
-                                    <Slider x:Name="YbGreenSlider" Minimum="0" Maximum="255" Width="100" Value="255"/>
-                                    <TextBlock Text="蓝:" Width="30" Margin="10,0,0,0"/>
-                                    <Slider x:Name="YbBlueSlider" Minimum="0" Maximum="255" Width="100" Value="0"/>
+        <Border Grid.Row="2" Margin="10" Background="White" CornerRadius="4">
+            <TabControl x:Name="MainTabControl" Style="{StaticResource ModernTabControl}">
+                <!-- AIME设置 -->
+                <TabItem Header="AIME" Style="{StaticResource ModernTabItem}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="10">
+                            <GroupBox Header="AIME 设置" Style="{StaticResource ModernGroupBox}">
+                                <StackPanel>
+                                    <CheckBox x:Name="AimeEnableCheckBox" Content="启用AIME虚拟读卡器" 
+                                             Style="{StaticResource ModernCheckBox}" Margin="5"/>
+                                    <Grid Margin="0,5,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Label Content="卡号文件路径:" Style="{StaticResource ModernLabel}"/>
+                                        <TextBox x:Name="AimePathTextBox" Grid.Column="1" 
+                                                Style="{StaticResource ModernTextBox}" Margin="5,0"/>
+                                    </Grid>
+                                    <Label Content="卡号内容:" Style="{StaticResource ModernLabel}" Margin="0,10,0,0"/>
+                                    <TextBox x:Name="CardContentTextBox" Height="100" 
+                                            AcceptsReturn="True" Margin="5" 
+                                            Style="{StaticResource ModernTextBox}"
+                                            VerticalScrollBarVisibility="Auto"/>
+                                    <Button Content="💾 保存卡号" Style="{StaticResource ModernButton}" 
+                                           HorizontalAlignment="Left" Margin="5" 
+                                           Click="SaveCardFile_Click"/>
                                 </StackPanel>
-                                <CheckBox x:Name="YbRandomCheckBox" Content="随机颜色" Margin="5"/>
-                                <CheckBox x:Name="YbRealAimeCheckBox" Content="使用真实Aime卡ID" Margin="5" IsChecked="True"/>
-                            </StackPanel>
-                        </GroupBox>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
+                            </GroupBox>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
 
-            <!-- SDDT专用设置 -->
-            <TabItem x:Name="SddtTab" Header="SDDT专用" Visibility="Collapsed">
-                <ScrollViewer>
-                    <StackPanel Margin="10">
-                        <GroupBox Header="LED设置">
-                            <StackPanel>
-                                <CheckBox x:Name="LedEnableCheckBox" Content="启用LED控制" Margin="5" IsChecked="True"/>
-                                <RadioButton x:Name="LedPipeRadio" Content="命名管道输出" Margin="5,2" GroupName="LedOutput" IsChecked="True"/>
-                                <RadioButton x:Name="LedSerialRadio" Content="串口输出" Margin="5,2" GroupName="LedOutput"/>
-
-                                <StackPanel x:Name="SerialSettingsPanel" Margin="20,5,5,5" Visibility="Collapsed">
+                <!-- 网络设置 -->
+                <TabItem Header="🌐 网络" Style="{StaticResource ModernTabItem}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="10">
+                            <GroupBox Header="DNS 设置" Style="{StaticResource ModernGroupBox}">
+                                <StackPanel>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="串口:" VerticalAlignment="Center"/>
-                                        <TextBox x:Name="SerialPortTextBox" Grid.Column="1" Margin="5" Text="COM5"/>
+                                        <Label Content="默认服务器:" Style="{StaticResource ModernLabel}"/>
+                                        <ComboBox x:Name="ServerComboBox" Grid.Column="1" 
+                                                 Style="{StaticResource ModernComboBox}" Margin="5" 
+                                                 SelectionChanged="ServerComboBox_SelectionChanged"/>
                                     </Grid>
+                                    <Grid x:Name="CustomServerGrid" Margin="0,10,0,0" Visibility="Collapsed">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Label Content="自定义地址:" Style="{StaticResource ModernLabel}"/>
+                                        <TextBox x:Name="CustomServerTextBox" Grid.Column="1" 
+                                                Style="{StaticResource ModernTextBox}" Margin="5"/>
+                                    </Grid>
+                                    <Grid Margin="0,10,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Label Content="AimeDB服务器:" Style="{StaticResource ModernLabel}"/>
+                                        <TextBox x:Name="AimeDbTextBox" Grid.Column="1" 
+                                                Style="{StaticResource ModernTextBox}" Margin="5"/>
+                                    </Grid>
+                                    <Grid Margin="0,10,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Label Content="备用DNS (可选):" Style="{StaticResource ModernLabel}"/>
+                                        <TextBox x:Name="RouterDnsTextBox" Grid.Column="1" 
+                                                Style="{StaticResource ModernTextBox}" Margin="5" 
+                                                Text="223.5.5.5"/>
+                                    </Grid>
+                                    <CheckBox x:Name="NetEnvEnableCheckBox" Content="启用网络环境模拟" 
+                                             Style="{StaticResource ModernCheckBox}" Margin="5" 
+                                             IsChecked="True"/>
+                                    <Border Background="#FFECF0F1" CornerRadius="3" Margin="5,10,5,0" 
+                                           Padding="10" BorderThickness="1" BorderBrush="#FFBDC3C7">
+                                        <TextBlock x:Name="ServerHelpTextBlock" TextWrapping="Wrap" 
+                                                  Foreground="#FF2C3E50" FontStyle="Italic"/>
+                                    </Border>
+                                </StackPanel>
+                            </GroupBox>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- KeyChip设置 -->
+                <TabItem Header="🔑 KeyChip" Style="{StaticResource ModernTabItem}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="10">
+                            <GroupBox Header="KeyChip 设置" Style="{StaticResource ModernGroupBox}">
+                                <StackPanel>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="波特率:" VerticalAlignment="Center"/>
-                                        <TextBox x:Name="SerialBaudTextBox" Grid.Column="1" Margin="5" Text="921600"/>
+                                        <Label Content="KeyChip ID (必填):" Style="{StaticResource ModernLabel}"/>
+                                        <TextBox x:Name="KeyChipIdTextBox" Grid.Column="1" 
+                                                Style="{StaticResource ModernTextBox}" Margin="5"/>
+                                    </Grid>
+                                    <Grid Margin="0,10,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Label Content="游戏ID:" Style="{StaticResource ModernLabel}"/>
+                                        <TextBox x:Name="GameIdTextBox" Grid.Column="1" 
+                                                Style="{StaticResource ModernTextBox}" Margin="5" 
+                                                IsReadOnly="True" Background="#FFECF0F1"/>
+                                    </Grid>
+                                    <Grid Margin="0,10,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Label Content="子网地址:" Style="{StaticResource ModernLabel}"/>
+                                        <TextBox x:Name="SubnetTextBox" Grid.Column="1" 
+                                                Style="{StaticResource ModernTextBox}" Margin="5" 
+                                                Text="192.168.1.0"/>
+                                    </Grid>
+                                    <Button Content="❓ 获取KeyChip帮助" Style="{StaticResource ModernButton}" 
+                                           HorizontalAlignment="Left" Margin="5" 
+                                           Click="ShowKeyChipHelp_Click"/>
+                                </StackPanel>
+                            </GroupBox>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- SDHD专用设置 -->
+                <TabItem x:Name="SdhdTab" Header="🎵 SDHD专用" 
+                        Style="{StaticResource ModernTabItem}" Visibility="Collapsed">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="10">
+                            <GroupBox Header="控制器设置" Style="{StaticResource ModernGroupBox}">
+                                <StackPanel>
+                                    <ComboBox x:Name="SdhdControllerCombo" Style="{StaticResource ModernComboBox}" 
+                                             Margin="5">
+                                        <ComboBoxItem>默认</ComboBoxItem>
+                                        <ComboBoxItem>YubiDeck</ComboBoxItem>
+                                        <ComboBoxItem>TASOLLER</ComboBoxItem>
+                                        <ComboBoxItem>Brokenithm</ComboBoxItem>
+                                    </ComboBox>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <GroupBox Header="红外传感器" Style="{StaticResource ModernGroupBox}" 
+                                     Margin="0,10,0,0">
+                                <StackPanel>
+                                    <CheckBox x:Name="IrEnableCheckBox" Content="启用独立红外传感器" 
+                                             Style="{StaticResource ModernCheckBox}" Margin="5"/>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <GroupBox Header="YubiDeck设置" Style="{StaticResource ModernGroupBox}" 
+                                     Margin="0,10,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="侧边灯颜色:" Margin="5,5,5,0" 
+                                              Foreground="#FF2C3E50" FontWeight="SemiBold"/>
+                                    <StackPanel Orientation="Horizontal" Margin="5">
+                                        <TextBlock Text="红:" Width="30" VerticalAlignment="Center"/>
+                                        <Slider x:Name="YbRedSlider" Style="{StaticResource ModernSlider}" 
+                                               Minimum="0" Maximum="255" Width="100" Value="0"/>
+                                        <TextBlock Text="绿:" Width="30" Margin="10,0,0,0" 
+                                                  VerticalAlignment="Center"/>
+                                        <Slider x:Name="YbGreenSlider" Style="{StaticResource ModernSlider}" 
+                                               Minimum="0" Maximum="255" Width="100" Value="255"/>
+                                        <TextBlock Text="蓝:" Width="30" Margin="10,0,0,0" 
+                                                  VerticalAlignment="Center"/>
+                                        <Slider x:Name="YbBlueSlider" Style="{StaticResource ModernSlider}" 
+                                               Minimum="0" Maximum="255" Width="100" Value="0"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="YbRandomCheckBox" Content="随机颜色" 
+                                             Style="{StaticResource ModernCheckBox}" Margin="5"/>
+                                    <CheckBox x:Name="YbRealAimeCheckBox" Content="使用真实Aime卡ID" 
+                                             Style="{StaticResource ModernCheckBox}" Margin="5" 
+                                             IsChecked="True"/>
+                                </StackPanel>
+                            </GroupBox>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- SDDT专用设置 -->
+                <TabItem x:Name="SddtTab" Header="💡 SDDT专用" 
+                        Style="{StaticResource ModernTabItem}" Visibility="Collapsed">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="10">
+                            <GroupBox Header="LED设置" Style="{StaticResource ModernGroupBox}">
+                                <StackPanel>
+                                    <CheckBox x:Name="LedEnableCheckBox" Content="启用LED控制" 
+                                             Style="{StaticResource ModernCheckBox}" Margin="5" 
+                                             IsChecked="True"/>
+                                    <StackPanel Orientation="Horizontal" Margin="5">
+                                        <RadioButton x:Name="LedPipeRadio" Content="命名管道输出" 
+                                                    Margin="5,2" GroupName="LedOutput" 
+                                                    IsChecked="True" Foreground="#FF2C3E50"/>
+                                        <RadioButton x:Name="LedSerialRadio" Content="串口输出" 
+                                                    Margin="20,2,5,2" GroupName="LedOutput" 
+                                                    Foreground="#FF2C3E50"/>
+                                    </StackPanel>
+
+                                    <Border x:Name="SerialSettingsPanel" 
+                                           Margin="20,5,5,5" 
+                                           Visibility="Collapsed"
+                                           Background="#FFF8F9F9" 
+                                           Padding="10" 
+                                           CornerRadius="3"
+                                           BorderThickness="1"
+                                           BorderBrush="#FFBDC3C7">
+                                        <StackPanel>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="串口:" VerticalAlignment="Center" 
+                                                          Margin="0,0,5,0"/>
+                                                <TextBox x:Name="SerialPortTextBox" Grid.Column="1" 
+                                                        Style="{StaticResource ModernTextBox}" 
+                                                        Text="COM5"/>
+                                            </Grid>
+                                            <Grid Margin="0,10,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="波特率:" VerticalAlignment="Center" 
+                                                          Margin="0,0,5,0"/>
+                                                <TextBox x:Name="SerialBaudTextBox" Grid.Column="1" 
+                                                        Style="{StaticResource ModernTextBox}" 
+                                                        Text="921600"/>
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <GroupBox Header="Unity设置" Style="{StaticResource ModernGroupBox}" 
+                                     Margin="0,10,0,0">
+                                <StackPanel>
+                                    <CheckBox x:Name="UnityEnableCheckBox" Content="启用Unity钩子" 
+                                             Style="{StaticResource ModernCheckBox}" Margin="5" 
+                                             IsChecked="True"/>
+                                    <Grid Margin="0,5,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="目标程序集:" VerticalAlignment="Center" 
+                                                  Margin="0,0,5,0"/>
+                                        <TextBox x:Name="TargetAssemblyTextBox" Grid.Column="1" 
+                                                Style="{StaticResource ModernTextBox}"/>
                                     </Grid>
                                 </StackPanel>
-                            </StackPanel>
-                        </GroupBox>
+                            </GroupBox>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
 
-                        <GroupBox Header="Unity设置" Margin="0,10,0,0">
-                            <StackPanel>
-                                <CheckBox x:Name="UnityEnableCheckBox" Content="启用Unity钩子" Margin="5" IsChecked="True"/>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="目标程序集:" VerticalAlignment="Center"/>
-                                    <TextBox x:Name="TargetAssemblyTextBox" Grid.Column="1" Margin="5"/>
-                                </Grid>
+                <!-- 高级编辑 -->
+                <TabItem x:Name="AdvancedTab" Header="⚙️ 高级编辑" 
+                        Style="{StaticResource ModernTabItem}" Visibility="Collapsed">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBox x:Name="AdvancedEditorTextBox" Grid.Row="0" 
+                                AcceptsReturn="True" 
+                                VerticalScrollBarVisibility="Auto" 
+                                HorizontalScrollBarVisibility="Auto" 
+                                FontFamily="Consolas"
+                                Style="{StaticResource ModernTextBox}"
+                                Margin="5"/>
+                        <Border Grid.Row="1" Background="#FFF8F9F9" Padding="5" 
+                               BorderThickness="0,1,0,0" BorderBrush="#FFBDC3C7">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Content="📥 加载当前配置" Style="{StaticResource ModernButton}" 
+                                       Margin="5" Click="LoadToAdvanced_Click"/>
+                                <Button Content="✅ 应用更改" Style="{StaticResource ModernButton}" 
+                                       Margin="5" Click="ApplyAdvanced_Click"/>
                             </StackPanel>
-                        </GroupBox>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
-            <!-- 高级编辑 -->
-            <TabItem x:Name="AdvancedTab" Header="高级编辑" Visibility="Collapsed">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-                    <TextBox x:Name="AdvancedEditorTextBox" Grid.Row="0" AcceptsReturn="True" 
-                            VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" FontFamily="Consolas"/>
-                    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button Content="加载当前配置" Margin="5" Click="LoadToAdvanced_Click"/>
-                        <Button Content="应用更改" Margin="5" Click="ApplyAdvanced_Click"/>
-                    </StackPanel>
-                </Grid>
-            </TabItem>
-        </TabControl>
+                        </Border>
+                    </Grid>
+                </TabItem>
+            </TabControl>
+        </Border>
 
         <!-- 状态栏 -->
-        <StatusBar Grid.Row="2">
+        <StatusBar Grid.Row="3" Style="{StaticResource ModernStatusBar}">
             <StatusBarItem>
-                <TextBlock x:Name="StatusTextBlock"/>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="📝 "/>
+                    <TextBlock x:Name="StatusTextBlock" Text="就绪"/>
+                </StackPanel>
+            </StatusBarItem>
+            <StatusBarItem HorizontalAlignment="Right">
+                <TextBlock x:Name="VersionTextBlock" Text="Performai Config Editor v1.0"/>
             </StatusBarItem>
         </StatusBar>
     </Grid>

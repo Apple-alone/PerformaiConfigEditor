@@ -8,11 +8,81 @@ using Microsoft.Win32;
 
 namespace Performai_Config_Editor
 {
+    public static class MsgBox
+    {
+        public static MessageBoxResult Show(string message, string caption = "提示",
+                                           MessageBoxButton buttons = MessageBoxButton.OK,
+                                           MessageBoxImage icon = MessageBoxImage.None)
+        {
+            Window owner = Application.Current.MainWindow;
+            return CustomMessageBox.Show(owner, message, caption, buttons, icon);
+        }
+
+        public static MessageBoxResult Show(string message, string details, string caption = "提示",
+                                           MessageBoxButton buttons = MessageBoxButton.OK,
+                                           MessageBoxImage icon = MessageBoxImage.None)
+        {
+            Window owner = Application.Current.MainWindow;
+            return CustomMessageBox.Show(owner, message, details, caption, buttons, icon);
+        }
+        
+        public static MessageBoxResult Info(string message, string caption = "提示")
+        {
+            return Show(message, caption, MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        public static MessageBoxResult Warning(string message, string caption = "警告")
+        {
+            return Show(message, caption, MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+
+        public static MessageBoxResult Error(string message, string caption = "错误")
+        {
+            return Show(message, caption, MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+
+        public static MessageBoxResult Question(string message, string caption = "确认")
+        {
+            return Show(message, caption, MessageBoxButton.YesNo, MessageBoxImage.Question);
+        }
+
+        public static MessageBoxResult QuestionCancel(string message, string caption = "确认")
+        {
+            return Show(message, caption, MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+        }
+        
+        public static MessageBoxResult Info(string message, string details, string caption = "提示")
+        {
+            return Show(message, details, caption, MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        public static MessageBoxResult Warning(string message, string details, string caption = "警告")
+        {
+            return Show(message, details, caption, MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+
+        public static MessageBoxResult Error(string message, string details, string caption = "错误")
+        {
+            return Show(message, details, caption, MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+
+        public static MessageBoxResult Question(string message, string details, string caption = "确认")
+        {
+            return Show(message, details, caption, MessageBoxButton.YesNo, MessageBoxImage.Question);
+        }
+
+        public static MessageBoxResult QuestionCancel(string message, string details, string caption = "确认")
+        {
+            return Show(message, details, caption, MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+        }
+    }
+
     public partial class MainWindow : Window
     {
         private Dictionary<string, Dictionary<string, string>> sectionData = new Dictionary<string, Dictionary<string, string>>();
-        private string filePath = "segatools.ini";
+        private string filePath = ""; // 初始为空字符串，表示未选择文件
         private string deviceDir = "DEVICE";
+        private bool isFileLoaded = false; // 新增：标记文件是否已加载
 
         private Dictionary<string, List<(string Address, string Description)>> serverPresets = new Dictionary<string, List<(string, string)>>
         {
@@ -50,7 +120,6 @@ namespace Performai_Config_Editor
                 }
             }
         };
-
         public MainWindow()
         {
             InitializeComponent();
@@ -60,13 +129,29 @@ namespace Performai_Config_Editor
             LedSerialRadio.Checked += (s, e) => SerialSettingsPanel.Visibility = Visibility.Visible;
             LedPipeRadio.Checked += (s, e) => SerialSettingsPanel.Visibility = Visibility.Collapsed;
 
-            if (File.Exists(filePath)) LoadFile();
+            // 设置版本信息
+            VersionTextBlock.Text = $"Performai Config Editor v1.0 | {DateTime.Now.Year}";
+
+
+            // 不再自动加载文件，等用户手动打开
+            // if (File.Exists(filePath)) LoadFile();
+
+            // 初始状态：未加载文件
+            isFileLoaded = false;
+            StatusTextBlock.Text = "请先打开配置文件";
         }
 
         private void LoadFile()
         {
             try
             {
+                if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
+                {
+                    StatusTextBlock.Text = "请先打开配置文件";
+                    isFileLoaded = false;
+                    return;
+                }
+
                 sectionData.Clear();
                 string currentSection = "";
 
@@ -91,11 +176,18 @@ namespace Performai_Config_Editor
                 DetectVersion();
                 UpdateUI();
                 StatusTextBlock.Text = $"已加载: {Path.GetFileName(filePath)} [{VersionComboBox.SelectedItem}]";
+
+                // 设置文件已加载标志
+                isFileLoaded = true;
+
+                // 加载文件后检查冲突
+                CheckCardFileConflict();
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"加载文件失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                MsgBox.Show($"加载文件失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
                 StatusTextBlock.Text = "加载文件失败";
+                isFileLoaded = false;
             }
         }
 
@@ -273,46 +365,238 @@ namespace Performai_Config_Editor
                 : defaultValue;
         }
 
-        private void LoadCardFile()
+        // 检测AIME/FeliCa文件冲突
+        private void CheckCardFileConflict()
         {
             try
             {
-                var path = AimePathTextBox.Text;
-                if (File.Exists(path))
+                if (File.Exists(filePath))
                 {
-                    CardContentTextBox.Text = File.ReadAllText(path);
+                    string configDir = Path.GetDirectoryName(filePath);
+                    if (!string.IsNullOrEmpty(configDir))
+                    {
+                        string aimePath = Path.Combine(configDir, "DEVICE", "aime.txt");
+                        string felicaPath = Path.Combine(configDir, "DEVICE", "felica.txt");
+
+                        bool aimeExists = File.Exists(aimePath);
+                        bool felicaExists = File.Exists(felicaPath);
+
+                        if (aimeExists && felicaExists)
+                        {
+                            // 两个文件都存在，警告用户
+                            if (MsgBox.Show(
+                                "检测到冲突：aime.txt 和 felica.txt 同时存在！\n\n" +
+                                "这可能导致AIME读卡器行为异常。\n" +
+                                "建议：\n" +
+                                "1. 删除其中一个文件\n" +
+                                "2. 或者在配置中禁用其中一个\n\n" +
+                                "是否现在打开文件所在目录？",
+                                "文件冲突警告",
+                                MessageBoxButton.YesNo,
+                                MessageBoxImage.Warning) == MessageBoxResult.Yes)
+                            {
+                                // 打开文件所在目录
+                                string deviceDir = Path.Combine(configDir, "DEVICE");
+                                if (Directory.Exists(deviceDir))
+                                {
+                                    System.Diagnostics.Process.Start("explorer.exe", deviceDir);
+                                }
+                            }
+                        }
+                    }
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"读取卡号文件失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
+                // 冲突检测失败不影响主要功能
+                Console.WriteLine($"冲突检测失败: {ex.Message}");
             }
+        }
+
+        private void LoadCardFile()
+        {
+            try
+            {
+                string configuredPath = AimePathTextBox.Text;
+                if (string.IsNullOrWhiteSpace(configuredPath))
+                {
+                    configuredPath = "DEVICE\\aime.txt"; // 默认路径
+                }
+
+                string actualPath = GetActualCardFilePath(configuredPath);
+
+                if (File.Exists(actualPath))
+                {
+                    // 直接读取文件内容，不添加任何模板或注释
+                    string fileContent = File.ReadAllText(actualPath);
+                    CardContentTextBox.Text = fileContent;
+
+                    // 如果实际读取的文件与配置的文件不同，更新显示
+                    if (!actualPath.EndsWith(configuredPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        string relativePath = MakePathRelativeIfPossible(actualPath);
+                        AimePathTextBox.Text = relativePath;
+                        StatusTextBlock.Text = $"已自动切换到: {Path.GetFileName(actualPath)}";
+                    }
+                    else
+                    {
+                        StatusTextBlock.Text = $"已加载卡号文件: {Path.GetFileName(actualPath)}";
+                    }
+
+                    // 加载后检查冲突
+                    CheckCardFileConflict();
+                }
+                else
+                {
+                    // 文件不存在，显示空内容
+                    CardContentTextBox.Text = "";
+                    StatusTextBlock.Text = "卡号文件不存在";
+                }
+            }
+            catch (Exception ex)
+            {
+                MsgBox.Show($"读取卡号文件失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
+                CardContentTextBox.Text = "";
+            }
+        }
+
+        // 智能获取实际卡号文件路径
+        private string GetActualCardFilePath(string configuredPath)
+        {
+            // 如果文件存在，直接返回
+            string fullPath = GetFullPath(configuredPath);
+            if (File.Exists(fullPath))
+            {
+                return fullPath;
+            }
+
+            // 文件不存在，尝试查找另一种格式的文件
+            string fileName = Path.GetFileName(configuredPath).ToLower();
+            string directory = Path.GetDirectoryName(fullPath);
+
+            if (!string.IsNullOrEmpty(directory) && Directory.Exists(directory))
+            {
+                // 如果配置的是aime.txt但不存在，尝试查找felica.txt
+                if (fileName == "aime.txt")
+                {
+                    string felicaPath = Path.Combine(directory, "felica.txt");
+                    if (File.Exists(felicaPath))
+                    {
+                        return felicaPath;
+                    }
+                }
+                // 如果配置的是felica.txt但不存在，尝试查找aime.txt
+                else if (fileName == "felica.txt")
+                {
+                    string aimePath = Path.Combine(directory, "aime.txt");
+                    if (File.Exists(aimePath))
+                    {
+                        return aimePath;
+                    }
+                }
+                // 如果配置的是其他文件名，尝试查找aime.txt或felica.txt
+                else
+                {
+                    string aimePath = Path.Combine(directory, "aime.txt");
+                    if (File.Exists(aimePath))
+                    {
+                        return aimePath;
+                    }
+
+                    string felicaPath = Path.Combine(directory, "felica.txt");
+                    if (File.Exists(felicaPath))
+                    {
+                        return felicaPath;
+                    }
+                }
+            }
+
+            // 如果都不存在，返回原始路径
+            return fullPath;
+        }
+
+        // 获取完整路径（处理相对路径）
+        private string GetFullPath(string path)
+        {
+            if (Path.IsPathRooted(path))
+            {
+                return path;
+            }
+
+            if (File.Exists(filePath))
+            {
+                string configDir = Path.GetDirectoryName(filePath);
+                if (!string.IsNullOrEmpty(configDir))
+                {
+                    return Path.Combine(configDir, path);
+                }
+            }
+
+            return path;
+        }
+
+        // 将完整路径转换为相对路径（如果可能）
+        private string MakePathRelativeIfPossible(string fullPath)
+        {
+            if (File.Exists(filePath))
+            {
+                string configDir = Path.GetDirectoryName(filePath);
+                if (!string.IsNullOrEmpty(configDir) && fullPath.StartsWith(configDir, StringComparison.OrdinalIgnoreCase))
+                {
+                    return fullPath.Substring(configDir.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                }
+            }
+
+            return fullPath;
         }
 
         private void SaveCardFile_Click(object sender, RoutedEventArgs e)
         {
+            // 检查是否已加载主配置文件
+            if (!isFileLoaded || string.IsNullOrEmpty(filePath))
+            {
+                MsgBox.Show("请先打开配置文件", "无法保存", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
             try
             {
                 string cardPath = AimePathTextBox.Text;
                 if (string.IsNullOrWhiteSpace(cardPath))
                 {
-                    MessageBox.Show("请先指定卡号文件路径", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    MsgBox.Show("请先指定卡号文件路径", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 
+                // 获取完整路径
+                string fullPath = GetFullPath(cardPath);
+
                 // 确保目录存在
-                string directory = Path.GetDirectoryName(cardPath);
+                string directory = Path.GetDirectoryName(fullPath);
                 if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
                 {
                     Directory.CreateDirectory(directory);
                 }
 
-                File.WriteAllText(cardPath, CardContentTextBox.Text);
-                MessageBox.Show("卡号文件保存成功", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
+                // 保存卡号文件
+                string cardContent = CardContentTextBox.Text;
+
+                // 直接保存，不进行任何格式验证
+                File.WriteAllText(fullPath, cardContent);
+
+                // 更新状态
+                string fileName = Path.GetFileName(fullPath);
+                StatusTextBlock.Text = $"卡号文件已保存: {fileName}";
+
+                // 保存后检查冲突
+                CheckCardFileConflict();
+
+                MsgBox.Show($"卡号文件保存成功！", "成功",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"保存卡号文件失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                MsgBox.Show($"保存卡号文件失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -323,17 +607,17 @@ namespace Performai_Config_Editor
                 var path = AimePathTextBox.Text;
                 if (string.IsNullOrWhiteSpace(path))
                 {
-                    MessageBox.Show("请先指定卡号文件路径", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    MsgBox.Show("请先指定卡号文件路径", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 
                 Directory.CreateDirectory(Path.GetDirectoryName(path));
                 File.WriteAllText(path, CardContentTextBox.Text);
-                MessageBox.Show("卡号文件保存成功", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
+                MsgBox.Show("卡号文件保存成功", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"保存卡号文件失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                MsgBox.Show($"保存卡号文件失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -423,7 +707,7 @@ namespace Performai_Config_Editor
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"保存文件失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                MsgBox.Show($"保存文件失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
                 StatusTextBlock.Text = "保存文件失败";
             }
         }
@@ -433,19 +717,35 @@ namespace Performai_Config_Editor
             var openFileDialog = new OpenFileDialog
             {
                 Filter = "INI 文件 (*.ini)|*.ini|所有文件 (*.*)|*.*",
-                Title = "选择 segatools.ini 文件"
+                Title = "选择 segatools.ini 文件",
+                InitialDirectory = Directory.Exists(deviceDir) ? deviceDir : Environment.CurrentDirectory
             };
 
             if (openFileDialog.ShowDialog() == true)
             {
                 filePath = openFileDialog.FileName;
                 deviceDir = Path.GetDirectoryName(filePath);
-                LoadFile();
+                isFileLoaded = true; // 标记文件已加载
+                LoadFile(); // LoadFile中已经包含冲突检查
             }
         }
 
         private void SaveFile_Click(object sender, RoutedEventArgs e)
         {
+            // 检查是否已加载文件
+            if (!isFileLoaded || string.IsNullOrEmpty(filePath))
+            {
+                MsgBox.Show("请先打开配置文件", "无法保存", MessageBoxButton.OK, MessageBoxImage.Warning);
+
+                // 提示用户打开文件
+                if (MsgBox.Show("是否现在打开配置文件？", "打开文件",
+                    MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+                {
+                    OpenFile_Click(sender, e);
+                }
+                return;
+            }
+
             try
             {
                 // 收集公共配置
@@ -504,27 +804,34 @@ namespace Performai_Config_Editor
 
                 SaveFile();
                 SaveCardFile();
+
+                // 检查冲突
+                CheckCardFileConflict();
+
+                MsgBox.Show("配置文件保存成功！", "保存成功", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"保存时出错: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                MsgBox.Show($"保存时出错: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
-        private void BrowseAimeFile_Click(object sender, RoutedEventArgs e)
+        // 获取AIME文件的初始目录
+        private string GetInitialDirectoryForAimeFile()
         {
-            var openFileDialog = new OpenFileDialog
-            {
-                InitialDirectory = Path.GetDirectoryName(AimePathTextBox.Text) ?? deviceDir,
-                Filter = "文本文件 (*.txt)|*.txt|所有文件 (*.*)|*.*",
-                Title = "选择卡号文件"
-            };
+            string path = AimePathTextBox.Text;
+            string fullPath = GetFullPath(path);
 
-            if (openFileDialog.ShowDialog() == true)
+            // 获取目录部分
+            string directory = Path.GetDirectoryName(fullPath);
+
+            // 如果目录不存在，使用配置文件所在目录
+            if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
             {
-                AimePathTextBox.Text = openFileDialog.FileName;
-                LoadCardFile();
+                directory = Path.GetDirectoryName(filePath) ?? deviceDir;
             }
+
+            return directory;
         }
 
         private void ShowKeyChipHelp_Click(object sender, RoutedEventArgs e)
@@ -534,33 +841,71 @@ namespace Performai_Config_Editor
 2. 注册/登录或迁移账号
 3. 点击【个人资料】→【卡片绑定和机台配置】获取KeyChip ID
 
-如果你使用AquaDX:
-1. 访问 https://aquadx.net
-2. 登录后获取KeyChip ID";
+关于子网地址：
+如果你不知道这个是什么请保持默认
+该选项对应的配置是subnet";
 
-            MessageBox.Show(helpText, "KeyChip ID 获取帮助", MessageBoxButton.OK, MessageBoxImage.Information);
+            MsgBox.Show(helpText, "KeyChip ID 获取帮助", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private void VersionComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (VersionComboBox.SelectedItem == null) return;
 
+            string selectedVersion = VersionComboBox.SelectedItem.ToString();
+            TabItem currentSelectedTab = MainTabControl.SelectedItem as TabItem;
+
+            // 判断当前是否在专用设置页
+            bool wasOnVersionSpecificTab = (currentSelectedTab == SdhdTab || currentSelectedTab == SddtTab);
+
+            // 隐藏所有版本特定选项卡
             SdhdTab.Visibility = Visibility.Collapsed;
             SddtTab.Visibility = Visibility.Collapsed;
 
-            switch (VersionComboBox.SelectedItem.ToString())
+            // 根据选择的版本显示相应的选项卡
+            switch (selectedVersion)
             {
                 case "SDHD":
                     SdhdTab.Visibility = Visibility.Visible;
+                    // 如果已有配置，重新加载SDHD设置
+                    if (sectionData.ContainsKey("chuniio") || sectionData.ContainsKey("zhousensor"))
+                    {
+                        LoadSdhdSettings();
+                    }
+                    // 如果之前就在专用选项卡上，切换到SDHD选项卡
+                    if (wasOnVersionSpecificTab)
+                    {
+                        MainTabControl.SelectedItem = SdhdTab;
+                    }
                     break;
+
                 case "SDDT":
                     SddtTab.Visibility = Visibility.Visible;
+                    // 如果已有配置，重新加载SDDT设置
+                    if (sectionData.ContainsKey("led15093") || sectionData.ContainsKey("unity"))
+                    {
+                        LoadSddtSettings();
+                    }
+                    // 如果之前就在专用选项卡上，切换到SDDT选项卡
+                    if (wasOnVersionSpecificTab)
+                    {
+                        MainTabControl.SelectedItem = SddtTab;
+                    }
+                    break;
+
+                default:
+                    // SDEZ/SDGA没有专用选项卡
+                    // 如果之前就在专用选项卡上，切换回AIME选项卡
+                    if (wasOnVersionSpecificTab)
+                    {
+                        MainTabControl.SelectedIndex = 0;
+                    }
                     break;
             }
 
-            GameIdTextBox.Text = VersionComboBox.SelectedItem.ToString();
+            GameIdTextBox.Text = selectedVersion;
             UpdateServerComboBox("");
-            StatusTextBlock.Text = $"当前版本: {VersionComboBox.SelectedItem}";
+            StatusTextBlock.Text = $"当前版本: {selectedVersion}";
         }
 
         private void ServerComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -578,13 +923,52 @@ namespace Performai_Config_Editor
 
         private void AdvancedModeCheckBox_Checked(object sender, RoutedEventArgs e)
         {
+            // 显示高级编辑选项卡
             AdvancedTab.Visibility = Visibility.Visible;
-            LoadToAdvanced_Click(sender, e);
+
+            // 设置高级选项卡为选中状态
+            MainTabControl.SelectedItem = AdvancedTab;
+
+            // 加载当前配置到编辑器
+            try
+            {
+                if (File.Exists(filePath))
+                {
+                    AdvancedEditorTextBox.Text = File.ReadAllText(filePath);
+                    StatusTextBlock.Text = "配置文件已加载到编辑器";
+                }
+                else
+                {
+                    AdvancedEditorTextBox.Text = "配置文件不存在，请先打开或创建一个配置文件";
+                    StatusTextBlock.Text = "配置文件不存在";
+                }
+            }
+            catch (Exception ex)
+            {
+                MsgBox.Show($"加载配置文件失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                AdvancedEditorTextBox.Text = $"; 加载文件时出错: {ex.Message}";
+            }
         }
 
         private void AdvancedModeCheckBox_Unchecked(object sender, RoutedEventArgs e)
         {
+            // 隐藏高级编辑选项卡
             AdvancedTab.Visibility = Visibility.Collapsed;
+
+            // 如果有其他可见的选项卡，切换到第一个可见的
+            if (SdhdTab.Visibility == Visibility.Visible)
+            {
+                MainTabControl.SelectedItem = SdhdTab;
+            }
+            else if (SddtTab.Visibility == Visibility.Visible)
+            {
+                MainTabControl.SelectedItem = SddtTab;
+            }
+            else
+            {
+                // 默认切换到AIME选项卡
+                MainTabControl.SelectedIndex = 0;
+            }
         }
 
         private void LoadToAdvanced_Click(object sender, RoutedEventArgs e)
@@ -596,7 +980,7 @@ namespace Performai_Config_Editor
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"加载到高级编辑器失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                MsgBox.Show($"加载到高级编辑器失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -606,11 +990,11 @@ namespace Performai_Config_Editor
             {
                 File.WriteAllText(filePath, AdvancedEditorTextBox.Text);
                 LoadFile();
-                MessageBox.Show("高级更改已应用", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
+                MsgBox.Show("高级更改已应用", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"应用高级更改失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                MsgBox.Show($"应用高级更改失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }

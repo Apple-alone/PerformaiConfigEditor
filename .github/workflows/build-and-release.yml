@@ -1,0 +1,191 @@
+name: Build and Release WPF Application
+
+on:
+  push:
+    tags: ['v*.*.*', 'v*.*.*-*']
+  workflow_dispatch:  # 手动触发
+    inputs:
+      version:
+        description: '发布版本号 (例如: 1.0.0)'
+        required: true
+        default: '1.0.0'
+      prerelease:
+        description: '是否为预发布版本'
+        type: boolean
+        default: false
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  CONFIGURATION: 'Release'
+  PROJECT_NAME: 'Performai-Config-Editor'
+  
+jobs:
+  build:
+    name: Build Application
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: Determine Version
+      id: version
+      run: |
+        if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == refs/tags/* ]]; then
+          # 从标签获取版本
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG_NAME#v}"
+        else
+          # 手动触发，使用输入版本
+          VERSION="${{ github.event.inputs.version }}"
+        fi
+        
+        # 清理版本号
+        VERSION=$(echo $VERSION | sed 's/^v//')
+        
+        # 如果是手动触发且不是标签推送，添加构建号
+        if [[ "${{ github.event_name }}" != "push" || ! "${{ github.ref }}" == refs/tags/* ]]; then
+          VERSION_WITH_BUILD="${VERSION}+${{ github.run_number }}"
+        else
+          VERSION_WITH_BUILD="${VERSION}"
+        fi
+        
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "VERSION_WITH_BUILD=$VERSION_WITH_BUILD" >> $GITHUB_ENV
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "version_with_build=$VERSION_WITH_BUILD" >> $GITHUB_OUTPUT
+        
+        echo "Version: $VERSION"
+        echo "Version with build: $VERSION_WITH_BUILD"
+        
+    - name: Restore dependencies
+      run: dotnet restore
+      
+    - name: Build application
+      run: |
+        dotnet build --configuration ${{ env.CONFIGURATION }} `
+          -p:Version=${{ env.VERSION }} `
+          -p:FileVersion=${{ env.VERSION_WITH_BUILD }} `
+          -p:AssemblyVersion=${{ env.VERSION }} `
+          --no-restore
+        
+    - name: Publish application
+      run: |
+        # 创建发布目录
+        New-Item -ItemType Directory -Path "./artifacts" -Force
+        
+        # 发布应用程序（不需要自包含）
+        dotnet publish --configuration ${{ env.CONFIGURATION }} `
+          -p:Version=${{ env.VERSION }} `
+          -p:FileVersion=${{ env.VERSION_WITH_BUILD }} `
+          -p:AssemblyVersion=${{ env.VERSION }} `
+          --output "./artifacts/${{ env.PROJECT_NAME }}" `
+          --no-restore
+        
+        # 创建ZIP包
+        $zipName = "${{ env.PROJECT_NAME }}-${{ env.VERSION }}.zip"
+        Compress-Archive -Path "./artifacts/${{ env.PROJECT_NAME }}/*" `
+          -DestinationPath "./artifacts/$zipName" `
+          -Force
+        
+        # 创建包含版本信息的README
+        $readmeContent = @"
+# ${{ env.PROJECT_NAME }} ${{ env.VERSION }}
+
+**发布日期**: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+**构建编号**: ${{ github.run_number }}
+
+## 系统要求
+
+- Windows 10 或更高版本
+- .NET 8.0 Desktop Runtime (必需)
+
+## 安装说明
+
+1. 下载并安装 [.NET 8.0 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)
+2. 下载本ZIP文件并解压到任意目录
+3. 运行 `${{ env.PROJECT_NAME }}.exe`
+
+## 文件列表
+
+- `${{ env.PROJECT_NAME }}.exe` - 主程序
+- `${{ env.PROJECT_NAME }}.dll` - 主程序集
+- 其他依赖文件...
+
+## 验证安装
+
+运行程序后，检查状态栏是否显示版本信息。
+"@
+        
+        $readmeContent | Out-File -FilePath "./artifacts/README.md" -Encoding UTF8
+        
+        # 创建简单的变更日志
+        if (Test-Path "./CHANGELOG.md") {
+          Copy-Item "./CHANGELOG.md" "./artifacts/CHANGELOG.md"
+        } else {
+          "## 版本 ${{ env.VERSION }}\n\n- 初始发布" | Out-File -FilePath "./artifacts/CHANGELOG.md" -Encoding UTF8
+        }
+        
+        echo "Build completed successfully"
+        echo "ZIP file: $zipName"
+        
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-output
+        path: |
+          ./artifacts/
+        retention-days: 90
+        
+  create-release:
+    name: Create Release
+    needs: [build]
+    runs-on: windows-latest
+    if: success()
+    
+    steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: build-output
+        path: ./release-files
+        
+    - name: Setup release info
+      id: release_info
+      run: |
+        if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == refs/tags/* ]]; then
+          TAG_NAME="${{ github.ref_name }}"
+          # 检查是否为预发布版本
+          if [[ "$TAG_NAME" == *"-alpha"* || "$TAG_NAME" == *"-beta"* || "$TAG_NAME" == *"-rc"* ]]; then
+            PRERELEASE="true"
+          else
+            PRERELEASE="false"
+          fi
+        else
+          TAG_NAME="v${{ github.event.inputs.version }}"
+          PRERELEASE="${{ github.event.inputs.prerelease }}"
+        fi
+        
+        echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+        echo "prerelease=$PRERELEASE" >> $GITHUB_OUTPUT
+        echo "Release tag: $TAG_NAME"
+        echo "Is prerelease: $PRERELEASE"
+        
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.release_info.outputs.tag_name }}
+        name: ${{ env.PROJECT_NAME }} ${{ steps.release_info.outputs.tag_name }}
+        body_path: ./release-files/README.md
+        prerelease: ${{ steps.release_info.outputs.prerelease == 'true' }}
+        draft: false
+        generate_release_notes: true
+        files: |
+          ./release-files/${{ env.PROJECT_NAME }}-*.zip
+          ./release-files/README.md
+          ./release-files/CHANGELOG.md

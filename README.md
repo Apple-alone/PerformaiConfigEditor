@@ -1,8 +1,8 @@
 # Performai Config Editor
 
-一个performai系列音游配置文件可视化编辑器
+一个Performai系列音游配置文件可视化编辑器
 
-<img width="736" height="393" alt="image" src="https://github.com/user-attachments/assets/1a5e776d-01c1-4ef8-bdf0-d9a6fcd21f1a" />
+<img width="886" height="543" alt="image" src="https://github.com/user-attachments/assets/79d5b8f2-cfbf-455f-8e87-85247a26a3a4" />
 
 ## 使用说明
 
@@ -12,7 +12,7 @@
 
 ## 未来的更新....
 
-- 优化石一般的选项
+~~优化石一般的选项~~
 - 增加更多可编辑配置文件
 - 保存预设
 - 修复MuNET的AimeDB服务器选项的填写

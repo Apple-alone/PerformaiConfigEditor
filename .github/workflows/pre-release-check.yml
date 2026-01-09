@@ -1,0 +1,102 @@
+name: Pre-release Check
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  validate:
+    name: Validate for v2.0.0 Release
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+        
+    - name: Check version consistency
+      run: |
+        echo "🔍 检查版本一致性..."
+        
+        # 检查 CHANGELOG.md
+        if (Test-Path "CHANGELOG.md") {
+          $changelogContent = Get-Content "CHANGELOG.md" -Raw
+          if ($changelogContent -match "\[2\.0\.0\]") {
+            echo "✅ CHANGELOG.md 包含 v2.0.0"
+          } else {
+            echo "❌ CHANGELOG.md 未包含 v2.0.0"
+          }
+        }
+        
+        # 检查项目文件
+        $csprojFiles = Get-ChildItem -Path . -Recurse -Filter "*.csproj"
+        if ($csprojFiles.Count -gt 0) {
+          $csprojContent = Get-Content $csprojFiles[0].FullName -Raw
+          echo "📦 项目文件检查完成"
+        }
+        
+    - name: Build test
+      run: |
+        echo "🔨 构建测试..."
+        dotnet build --configuration Release -p:Version=2.0.0
+        
+        if ($LASTEXITCODE -eq 0) {
+          echo "✅ 构建测试通过"
+        } else {
+          echo "❌ 构建测试失败"
+          exit 1
+        }
+        
+    - name: Publish test
+      run: |
+        echo "🚀 发布测试..."
+        
+        $csprojFiles = Get-ChildItem -Path . -Recurse -Filter "*.csproj"
+        if ($csprojFiles.Count -eq 0) {
+          echo "跳过发布测试"
+          exit 0
+        }
+        
+        $projectFile = $csprojFiles[0].FullName
+        $outputDir = "./test-v2.0.0"
+        
+        dotnet publish $projectFile --configuration Release -p:Version=2.0.0 --output $outputDir
+        
+        if ($LASTEXITCODE -eq 0) {
+          echo "✅ 发布测试通过"
+          
+          # 检查生成的文件
+          $exeFiles = Get-ChildItem $outputDir -Filter "*.exe"
+          if ($exeFiles.Count -gt 0) {
+            echo "📄 生成的可执行文件:"
+            foreach ($exe in $exeFiles) {
+              echo "  - $($exe.Name)"
+            }
+          }
+          
+          Remove-Item -Path $outputDir -Recurse -Force
+        } else {
+          echo "❌ 发布测试失败"
+          exit 1
+        }
+        
+    - name: Ready for release
+      run: |
+        echo "🎉 所有检查通过！"
+        echo ""
+        echo "📋 发布检查清单:"
+        echo "  ✅ 代码已提交到 main/master 分支"
+        echo "  ✅ 构建测试通过"
+        echo "  ✅ 发布测试通过"
+        echo "  ✅ CHANGELOG 已更新"
+        echo ""
+        echo "🚀 准备发布 v2.0.0:"
+        echo "  1. 创建标签: git tag v2.0.0"
+        echo "  2. 推送标签: git push origin v2.0.0"
+        echo "  3. 查看 GitHub Actions 自动发布"

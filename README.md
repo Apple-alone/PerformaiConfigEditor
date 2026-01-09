@@ -6,7 +6,7 @@
 
 ## 使用说明
 
-从 [Release](https://github.com/Apple-alone/PerformaiConfigEditor/releases) 上下载编辑器，在使用前请确认安装了 [.NET 8.0 运行时](https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/8.0.19/windowsdesktop-runtime-8.0.19-win-x64.exe)
+从 [Release](https://github.com/Apple-alone/PerformaiConfigEditor/releases) 上下载编辑器，在使用前请确认安装了 [.NET 8.0 运行时](https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/8.0.22/windowsdesktop-runtime-8.0.22-win-x64.exe)
 
 在编辑器中跟着提示编辑你的配置文件
 

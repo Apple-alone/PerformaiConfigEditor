@@ -1,307 +1,47 @@
-name: Release v2.0.0
+name: Release
 
 on:
   push:
-    tags:
-      - 'v2.0.0'
-  workflow_dispatch:
-    inputs:
-      force_release:
-        description: '发布 v2.0.0'
-        type: boolean
-        default: false
-
-env:
-  VERSION: '2.0.0'
-  TAG_NAME: 'v2.0.0'
-  PROJECT_NAME: 'Performai-Config-Editor'
-  CONFIGURATION: 'Release'
+    tags: ['v*']
 
 jobs:
-  build-and-release:
-    name: Build and Release v2.0.0
+  build:
     runs-on: windows-latest
     
+    permissions:
+      contents: write
+    
     steps:
-    # 1. 检出代码
-    - name: Checkout repository
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
       with:
         fetch-depth: 0
         
-    # 2. 设置 .NET
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: '8.0.x'
         
-    # 3. 显示版本信息
-    - name: Display version info
+    - name: Get version from tag
+      id: get_version
       run: |
-        echo "🎉 开始发布 v2.0.0"
-        echo "🏷️  标签: ${{ env.TAG_NAME }}"
-        echo "📦 版本: ${{ env.VERSION }}"
-        echo "📅 时间: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+        $tag = "${{ github.ref }}"
+        $version = $tag -replace 'refs/tags/v', ''
+        echo "VERSION=$version" >> $env:GITHUB_ENV
+        echo "TAG_NAME=v$version" >> $env:GITHUB_ENV
         
-    # 4. 查找项目文件
-    - name: Find project file
-      id: find-project
+    - name: Build
+      run: dotnet build --configuration Release -p:Version=$env:VERSION
+      
+    - name: Publish
       run: |
-        echo "🔍 查找项目文件..."
-        $csprojFiles = Get-ChildItem -Path . -Recurse -Filter "*.csproj"
+        $outputDir = "./publish/Performai-Config-Editor-$env:VERSION"
+        dotnet publish --configuration Release -p:Version=$env:VERSION --output $outputDir
+        Compress-Archive -Path "$outputDir/*" -DestinationPath "./publish/Performai-Config-Editor-$env:VERSION.zip" -Force
         
-        if ($csprojFiles.Count -eq 0) {
-          echo "❌ 错误: 未找到 .csproj 文件"
-          exit 1
-        }
-        
-        $projectFile = $csprojFiles[0]
-        echo "✅ 找到项目文件: $($projectFile.FullName)"
-        echo "PROJECT_FILE=$($projectFile.FullName)" >> $env:GITHUB_ENV
-        
-    # 5. 恢复依赖
-    - name: Restore dependencies
-      run: |
-        echo "📦 恢复 NuGet 依赖..."
-        dotnet restore "$env:PROJECT_FILE"
-        
-    # 6. 构建应用
-    - name: Build application
-      run: |
-        echo "🔨 构建应用程序 v2.0.0..."
-        dotnet build "$env:PROJECT_FILE" `
-          --configuration ${{ env.CONFIGURATION }} `
-          -p:Version=${{ env.VERSION }} `
-          -p:FileVersion=${{ env.VERSION }} `
-          -p:AssemblyVersion=${{ env.VERSION }} `
-          --no-restore
-        
-        if ($LASTEXITCODE -eq 0) {
-          echo "✅ 构建成功"
-        } else {
-          echo "❌ 构建失败"
-          exit 1
-        }
-        
-    # 7. 发布应用
-    - name: Publish application
-      run: |
-        echo "🚀 发布应用程序..."
-        
-        # 创建发布目录
-        $publishDir = "./publish/${{ env.PROJECT_NAME }}-${{ env.VERSION }}"
-        New-Item -ItemType Directory -Path $publishDir -Force
-        
-        # 发布应用
-        dotnet publish "$env:PROJECT_FILE" `
-          --configuration ${{ env.CONFIGURATION }} `
-          -p:Version=${{ env.VERSION }} `
-          -p:FileVersion=${{ env.VERSION }} `
-          --output $publishDir `
-          --no-restore
-        
-        if ($LASTEXITCODE -ne 0) {
-          echo "❌ 发布失败"
-          exit 1
-        }
-        
-        echo "✅ 发布成功"
-        
-        # 显示文件信息
-        $exeFiles = Get-ChildItem $publishDir -Filter "*.exe"
-        if ($exeFiles.Count -gt 0) {
-          echo "📄 生成的文件:"
-          foreach ($exe in $exeFiles) {
-            $sizeMB = [math]::Round($exe.Length/1MB, 2)
-            echo "  - $($exe.Name) (${sizeMB} MB)"
-          }
-        }
-        
-        $allFiles = Get-ChildItem $publishDir -File -Recurse
-        $totalSize = ($allFiles | Measure-Object -Property Length -Sum).Sum
-        $totalSizeMB = [math]::Round($totalSize/1MB, 2)
-        
-        echo "📊 统计:"
-        echo "  文件总数: $($allFiles.Count)"
-        echo "  总大小: ${totalSizeMB} MB"
-        
-    # 8. 创建 ZIP 包
-    - name: Create ZIP archive
-      run: |
-        echo "📦 创建 ZIP 压缩包..."
-        
-        $publishDir = "./publish/${{ env.PROJECT_NAME }}-${{ env.VERSION }}"
-        $zipFile = "./publish/${{ env.PROJECT_NAME }}-${{ env.VERSION }}.zip"
-        
-        if (Test-Path $publishDir) {
-          Compress-Archive -Path "$publishDir/*" -DestinationPath $zipFile -Force
-          
-          $zipInfo = Get-Item $zipFile
-          $zipSizeMB = [math]::Round($zipInfo.Length/1MB, 2)
-          
-          echo "✅ ZIP 包创建成功"
-          echo "📦 文件: $($zipInfo.Name)"
-          echo "📏 大小: ${zipSizeMB} MB"
-        } else {
-          echo "❌ 发布目录不存在"
-          exit 1
-        }
-        
-    # 9. 生成详细的发布说明
-    - name: Generate release notes
-      run: |
-        echo "📝 生成发布说明..."
-        
-        $releaseNotes = @"
-# 🎮 Performai Config Editor v2.0.0
-
-## 🎉 重要更新
-
-**Performai Config Editor 2.0.0** 是一个重大更新版本，带来了全新的用户体验和增强的功能。
-
-## 📅 发布信息
-- **版本号**: 2.0.0
-- **发布日期**: $(Get-Date -Format 'yyyy年MM月dd日')
-- **构建编号**: ${{ github.run_number }}
-- **构建时间**: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
-
-## 🚀 新特性
-
-### ✨ 全新功能
-1. **现代化 UI 设计** - 全新的界面设计，更美观易用
-2. **自定义消息框** - 美观的自定义提示框，替代系统默认
-3. **智能配置检测** - 自动检测配置文件版本和类型
-4. **高级编辑模式** - 支持直接编辑配置文件源代码
-
-### 🔧 功能增强
-1. **AIME 配置管理** - 增强的卡号文件管理
-2. **网络设置优化** - 支持多个服务器预设
-3. **KeyChip 配置** - 完善的 KeyChip ID 管理
-4. **SDHD/SDDT 专用设置** - 针对不同版本的优化配置
-
-### 🛠️ 技术改进
-1. **基于 .NET 8.0** - 最新的 .NET 框架
-2. **现代化 WPF 架构** - 使用最新的 WPF 技术
-3. **GitHub Actions 集成** - 自动化构建和发布
-4. **代码质量保证** - 完善的 CI/CD 流程
-
-## 📋 系统要求
-- **操作系统**: Windows 10 或更高版本
-- **运行时**: [.NET 8.0 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)
-- **内存**: 至少 2GB RAM
-- **磁盘空间**: 至少 100MB 可用空间
-
-## 📥 安装说明
-
-### 方法一：快速安装
-1. 下载 **[Performai-Config-Editor-2.0.0.zip](https://github.com/${{ github.repository }}/releases/download/${{ env.TAG_NAME }}/${{ env.PROJECT_NAME }}-${{ env.VERSION }}.zip)**
-2. 解压到任意目录
-3. 运行 `Performai-Config-Editor.exe`
-
-### 方法二：手动安装
-1. 确保已安装 .NET 8.0 Desktop Runtime
-2. 下载发布包并解压
-3. 双击运行主程序
-
-## 🔍 主要功能
-
-### 1. AIME 设置
-- 启用/禁用 AIME 虚拟读卡器
-- 卡号文件路径配置
-- 卡号内容编辑和管理
-
-### 2. 网络设置
-- DNS 服务器配置
-- 多服务器预设选择
-- 网络环境模拟
-- AimeDB 服务器设置
-
-### 3. KeyChip 设置
-- KeyChip ID 管理
-- 游戏 ID 自动识别
-- 子网地址配置
-
-### 4. 版本专用设置
-- **SDHD 专用**: 控制器设置、红外传感器、YubiDeck 配置
-- **SDDT 专用**: LED 设置、Unity 钩子、串口配置
-
-### 5. 高级功能
-- 查看和编辑配置文件源代码
-- 智能配置冲突检测
-- 卡号文件自动切换
-
-## 🐛 已知问题
-- 某些特殊字符在卡号文件中可能显示异常
-- 首次运行时可能需要管理员权限
-- 网络配置需要重启应用生效
-
-## 🔄 从 v1.0 升级
-1. 备份现有的配置文件
-2. 下载并安装 v2.0.0
-3. 导入之前的配置（如果需要）
-4. 享受新功能！
-
-## 📞 支持与反馈
-- **问题报告**: 在 GitHub Issues 中提交问题
-- **功能建议**: 欢迎提出改进建议
-- **文档**: 查看项目 README 获取更多信息
-
-## 🙏 致谢
-感谢所有贡献者和用户的反馈与支持！
-
----
-
-### 📄 技术信息
-- **框架**: .NET 8.0 WPF
-- **构建系统**: GitHub Actions
-- **代码仓库**: https://github.com/${{ github.repository }}
-- **许可证**: 查看项目 LICENSE 文件
-
-### 🔒 安全说明
-- 不收集用户个人信息
-- 所有配置保存在本地
-- 开源代码可审计
-
----
-
-**🤖 此版本由 GitHub Actions 自动构建发布**
-**⭐ 如果喜欢这个项目，请给个 Star！**
-"@
-        
-        $releaseNotes | Out-File -FilePath "./publish/RELEASE_NOTES.md" -Encoding UTF8
-        echo "✅ 发布说明已生成"
-        
-    # 10. 创建 GitHub Release
-    - name: Create GitHub Release
-      id: create_release
+    - name: Create Release
       uses: softprops/action-gh-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ env.TAG_NAME }}
-        name: ${{ env.PROJECT_NAME }} v${{ env.VERSION }}
-        body_path: ./publish/RELEASE_NOTES.md
-        prerelease: false
-        draft: false
-        generate_release_notes: false
-        files: |
-          ./publish/${{ env.PROJECT_NAME }}-${{ env.VERSION }}.zip
-          ./publish/RELEASE_NOTES.md
-        
-    # 11. 验证 Release
-    - name: Verify release
-      run: |
-        echo "🎉 发布完成！"
-        echo "🔗 Release URL: https://github.com/${{ github.repository }}/releases/tag/${{ env.TAG_NAME }}"
-        echo "📦 下载链接: https://github.com/${{ github.repository }}/releases/download/${{ env.TAG_NAME }}/${{ env.PROJECT_NAME }}-${{ env.VERSION }}.zip"
-        echo "🏷️  标签: ${{ env.TAG_NAME }}"
-        echo "📊 版本: ${{ env.VERSION }}"
-        
-    # 12. 上传构建产物
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: release-v2.0.0
-        path: |
-          ./publish/
-        retention-days: 90
+        name: Performai Config Editor ${{ env.VERSION }}
+        generate_release_notes: true
+        files: ./publish/Performai-Config-Editor-*.zip

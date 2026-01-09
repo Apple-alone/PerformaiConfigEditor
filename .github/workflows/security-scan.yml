@@ -1,0 +1,107 @@
+name: Security Scan
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # 每周日运行
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+jobs:
+  locate-project:
+    name: Locate Project
+    runs-on: windows-latest
+    outputs:
+      project_path: ${{ steps.find-project.outputs.project_path }}
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Find project file
+      id: find-project
+      run: |
+        $csprojFiles = Get-ChildItem -Path . -Recurse -Filter "*.csproj"
+        if ($csprojFiles.Count -eq 0) {
+          echo "错误: 未找到.csproj文件"
+          exit 1
+        }
+        
+        $projectFile = $csprojFiles[0]
+        $relativePath = $projectFile.FullName.Substring($PWD.Path.Length + 1)
+        
+        echo "使用项目文件: $relativePath"
+        echo "project_path=$relativePath" >> $GITHUB_OUTPUT
+        
+  security:
+    name: Security Analysis
+    runs-on: windows-latest
+    needs: locate-project
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+        
+    - name: Check for outdated packages
+      run: |
+        echo "=== 检查过时的 NuGet 包 ==="
+        dotnet list "${{ needs.locate-project.outputs.project_path }}" package --outdated
+      continue-on-error: true
+      
+    - name: Check for vulnerable packages
+      run: |
+        echo "=== 检查有漏洞的 NuGet 包 ==="
+        dotnet list "${{ needs.locate-project.outputs.project_path }}" package --vulnerable
+      continue-on-error: true
+      
+    - name: Basic code security scan
+      run: |
+        echo "=== 基本代码安全检查 ==="
+        
+        # 查找所有C#文件
+        $csFiles = Get-ChildItem -Path . -Recurse -Filter "*.cs" | Where-Object {
+          $_.FullName -notlike "*\obj\*" -and $_.FullName -notlike "*\bin\*"
+        }
+        
+        echo "扫描 $($csFiles.Count) 个C#文件..."
+        
+        # 简单的安全检查逻辑
+        $issues = 0
+        
+        foreach ($file in $csFiles) {
+          $content = Get-Content $file.FullName -Raw
+          
+          # 检查硬编码密码
+          if ($content -match 'password\s*=\s*"[^"]+"' -and $content -notmatch 'example') {
+            Write-Warning "可能发现硬编码密码: $($file.Name)"
+            $issues++
+          }
+        }
+        
+        if ($issues -eq 0) {
+          echo "✅ 未发现明显的安全问题"
+        }
+        
+      continue-on-error: true
+      
+    - name: Generate security summary
+      run: |
+        echo "安全扫描完成于: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" > security-summary.txt
+        echo "构建编号: ${{ github.run_number }}" >> security-summary.txt
+        echo "项目: ${{ needs.locate-project.outputs.project_path }}" >> security-summary.txt
+        echo "状态: 扫描完成" >> security-summary.txt
+        
+        Get-Content security-summary.txt
+        
+    - name: Upload security summary
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: security-summary
+        path: security-summary.txt

@@ -2,7 +2,8 @@ name: Release
 
 on:
   push:
-    tags: ['v*']
+    tags:
+      - 'v2.0.0'
 
 jobs:
   build:
@@ -10,38 +11,61 @@ jobs:
     
     permissions:
       contents: write
-    
+
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
-        
+
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: '8.0.x'
-        
+
     - name: Get version from tag
       id: get_version
       run: |
         $tag = "${{ github.ref }}"
         $version = $tag -replace 'refs/tags/v', ''
         echo "VERSION=$version" >> $env:GITHUB_ENV
-        echo "TAG_NAME=v$version" >> $env:GITHUB_ENV
-        
+        echo "tag_name=v$version" >> $env:GITHUB_ENV
+        echo "version=$version" >> $GITHUB_OUTPUT
+
+    - name: Restore dependencies
+      run: dotnet restore
+
     - name: Build
-      run: dotnet build --configuration Release -p:Version=$env:VERSION
-      
+      run: dotnet build --configuration Release -p:Version=${{ env.VERSION }}
+
     - name: Publish
       run: |
-        $outputDir = "./publish/Performai-Config-Editor-$env:VERSION"
-        dotnet publish --configuration Release -p:Version=$env:VERSION --output $outputDir
-        Compress-Archive -Path "$outputDir/*" -DestinationPath "./publish/Performai-Config-Editor-$env:VERSION.zip" -Force
-        
+        $outputDir = "./publish/Performai-Config-Editor-${{ env.VERSION }}"
+        dotnet publish --configuration Release -p:Version=${{ env.VERSION }} --output $outputDir
+        Compress-Archive -Path "$outputDir/*" -DestinationPath "./publish/Performai-Config-Editor-${{ env.VERSION }}.zip" -Force
+
+    - name: Extract release notes from CHANGELOG.md
+      id: changelog
+      run: |
+        if (Test-Path "CHANGELOG.md") {
+          $content = Get-Content "CHANGELOG.md" -Raw
+          if ($content -match '## \[${{ env.VERSION }}\].*?(?=## \[|$)') {
+            $releaseNotes = $matches[0].Trim()
+            $releaseNotes | Out-File -FilePath "./publish/RELEASE_NOTES.md" -Encoding UTF8
+            echo "notes_extracted=true" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "notes_extracted=false" >> $env:GITHUB_OUTPUT
+          }
+        } else {
+          echo "notes_extracted=false" >> $env:GITHUB_OUTPUT
+        }
+
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: ${{ env.TAG_NAME }}
+        tag_name: ${{ env.tag_name }}
         name: Performai Config Editor ${{ env.VERSION }}
-        generate_release_notes: true
-        files: ./publish/Performai-Config-Editor-*.zip
+        body_path: ./publish/RELEASE_NOTES.md
+        draft: false
+        prerelease: false
+        files: ./publish/Performai-Config-Editor-${{ env.VERSION }}.zip

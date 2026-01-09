@@ -17,7 +17,3 @@
 1. 确保安装 [.NET 8.0 Desktop Runtime](https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/8.0.22/windowsdesktop-runtime-8.0.22-win-x64.exe)
 2. 下载最新版本ZIP文件
 3. 解压到任意目录运行
-
----
-
-*此文件由自动化构建系统维护*

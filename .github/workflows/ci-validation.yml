@@ -2,9 +2,9 @@ name: CI Validation
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main, master, develop ]
   pull_request:
-    branches: [ master ]
+    branches: [ main, master ]
 
 jobs:
   validate:
@@ -24,41 +24,18 @@ jobs:
       run: |
         echo "=== 查找项目文件 ==="
         Get-ChildItem -Path . -Recurse -Filter "*.csproj" | ForEach-Object {
-          echo "Found project: $($_.FullName)"
-          echo "Relative path: $($_.FullName.Substring($PWD.Path.Length + 1))"
-        }
-        
-        echo "`n=== 当前目录结构 ==="
-        Get-ChildItem -Path . -Recurse | Where-Object { $_.PSIsContainer } | Select-Object FullName | ForEach-Object {
-          echo "$($_.FullName)"
+          echo "找到项目: $($_.FullName)"
         }
         
     - name: Restore dependencies
       run: |
-        echo "Restoring dependencies..."
-        # 查找并恢复所有项目
-        Get-ChildItem -Path . -Recurse -Filter "*.csproj" | ForEach-Object {
-          echo "Restoring: $($_.Name)"
-          dotnet restore $_.FullName
-        }
+        echo "恢复依赖..."
+        dotnet restore
         
     - name: Build solution
       run: |
-        echo "Building solution..."
-        # 查找解决方案或项目文件
-        $slnFiles = Get-ChildItem -Path . -Recurse -Filter "*.sln"
-        $csprojFiles = Get-ChildItem -Path . -Recurse -Filter "*.csproj"
-        
-        if ($slnFiles.Count -gt 0) {
-          echo "Found solution file: $($slnFiles[0].Name)"
-          dotnet build $slnFiles[0].FullName --configuration Release
-        } elseif ($csprojFiles.Count -gt 0) {
-          echo "Found project file: $($csprojFiles[0].Name)"
-          dotnet build $csprojFiles[0].FullName --configuration Release
-        } else {
-          echo "Error: No .sln or .csproj files found"
-          exit 1
-        }
+        echo "构建解决方案..."
+        dotnet build --configuration Release
         
   test-publish:
     name: Test Publish
@@ -73,32 +50,21 @@ jobs:
       with:
         dotnet-version: '8.0.x'
         
-    - name: Find and display project structure
+    - name: Find project file
+      id: find-project
       run: |
-        echo "=== 项目结构分析 ==="
-        echo "当前工作目录: $PWD"
-        echo "`n所有文件:"
-        Get-ChildItem -Path . -Recurse -File | Select-Object -First 20 | ForEach-Object {
-          echo "  $($_.FullName.Substring($PWD.Path.Length + 1))"
-        }
-        
-        echo "`n=== 查找.csproj文件 ==="
+        echo "查找项目文件..."
         $csprojFiles = Get-ChildItem -Path . -Recurse -Filter "*.csproj"
+        
         if ($csprojFiles.Count -eq 0) {
           echo "错误: 未找到.csproj文件"
-          echo "当前目录内容:"
-          Get-ChildItem -Path .
+          Get-ChildItem -Path . -Recurse | Format-Table Name, FullName
           exit 1
         }
         
-        foreach ($file in $csprojFiles) {
-          echo "找到项目文件: $($file.FullName)"
-          echo "相对路径: $($file.FullName.Substring($PWD.Path.Length + 1))"
-        }
-        
-        # 使用第一个找到的.csproj文件
+        # 使用第一个找到的项目文件
         $projectFile = $csprojFiles[0].FullName
-        echo "`n将使用项目文件: $projectFile"
+        echo "项目文件: $projectFile"
         echo "PROJECT_FILE=$projectFile" >> $env:GITHUB_ENV
         
     - name: Test publish
@@ -112,32 +78,38 @@ jobs:
         
         # 测试发布
         echo "执行发布命令..."
-        dotnet publish "$env:PROJECT_FILE" `
-          --configuration Release `
-          --output $outputDir `
-          -p:Version=1.0.0 `
-          --verbosity minimal
+        dotnet publish "$env:PROJECT_FILE" --configuration Release --output $outputDir -p:Version=1.0.0 --verbosity minimal
         
+        # 检查发布结果
         if ($LASTEXITCODE -eq 0) {
           echo "✅ 发布成功"
-        else {
+        } else {
           echo "❌ 发布失败"
           exit 1
         }
         
         # 验证生成的文件
-        echo "`n=== 生成的文件 ==="
-        Get-ChildItem $outputDir -File | Select-Object Name, Length, LastWriteTime | Format-Table -AutoSize
+        echo ""
+        echo "=== 生成的文件 ==="
+        $files = Get-ChildItem $outputDir -File
+        if ($files.Count -gt 0) {
+          $files | Select-Object Name, Length, LastWriteTime | Format-Table -AutoSize
+        } else {
+          echo "未找到文件"
+        }
         
         # 检查主要程序集
         $exeFiles = Get-ChildItem $outputDir -Filter "*.exe"
         if ($exeFiles.Count -gt 0) {
-          echo "`n✅ 找到可执行文件:"
+          echo ""
+          echo "✅ 找到可执行文件:"
           foreach ($exe in $exeFiles) {
-            echo "  - $($exe.Name) ($([math]::Round($exe.Length/1KB, 2)) KB)"
+            $sizeKB = [math]::Round($exe.Length/1KB, 2)
+            echo "  - $($exe.Name) (${sizeKB} KB)"
           }
         } else {
-          echo "`n⚠️ 未找到.exe文件，检查.dll文件..."
+          echo ""
+          echo "⚠️ 未找到.exe文件，检查.dll文件..."
           $dllFiles = Get-ChildItem $outputDir -Filter "*.dll" | Select-Object -First 5
           if ($dllFiles.Count -gt 0) {
             echo "找到DLL文件:"
@@ -151,10 +123,14 @@ jobs:
         
         # 显示文件总数和总大小
         $allFiles = Get-ChildItem $outputDir -File -Recurse
-        $totalSize = ($allFiles | Measure-Object -Property Length -Sum).Sum
-        echo "`n📊 统计:"
-        echo "  文件总数: $($allFiles.Count)"
-        echo "  总大小: $([math]::Round($totalSize/1KB, 2)) KB"
+        if ($allFiles.Count -gt 0) {
+          $totalSize = ($allFiles | Measure-Object -Property Length -Sum).Sum
+          $totalSizeKB = [math]::Round($totalSize/1KB, 2)
+          echo ""
+          echo "📊 统计:"
+          echo "  文件总数: $($allFiles.Count)"
+          echo "  总大小: ${totalSizeKB} KB"
+        }
         
         # 清理
         Remove-Item -Path $outputDir -Recurse -Force -ErrorAction SilentlyContinue
@@ -164,11 +140,14 @@ jobs:
         echo "=== 测试不同配置 ==="
         
         # 测试Debug配置
-        echo "`n测试Debug配置..."
+        echo ""
+        echo "测试Debug配置..."
         dotnet build "$env:PROJECT_FILE" --configuration Debug
         
         # 测试Release配置
-        echo "`n测试Release配置..."
+        echo ""
+        echo "测试Release配置..."
         dotnet build "$env:PROJECT_FILE" --configuration Release
         
+        echo ""
         echo "✅ 所有配置测试通过"

@@ -35,8 +35,6 @@ jobs:
       id: find-project
       run: |
         echo "查找项目文件..."
-        
-        # 查找所有.csproj文件
         $csprojFiles = Get-ChildItem -Path . -Recurse -Filter "*.csproj"
         
         if ($csprojFiles.Count -eq 0) {
@@ -44,22 +42,15 @@ jobs:
           exit 1
         }
         
-        # 使用第一个找到的项目文件
         $projectFile = $csprojFiles[0]
         $relativePath = $projectFile.FullName.Substring($PWD.Path.Length + 1)
-        
-        echo "找到项目文件: $($projectFile.Name)"
-        echo "完整路径: $($projectFile.FullName)"
-        echo "相对路径: $relativePath"
-        
-        # 提取项目名称（不带扩展名）
         $projectName = $projectFile.BaseName
+        
+        echo "项目文件: $relativePath"
+        echo "项目名称: $projectName"
         
         echo "project_path=$relativePath" >> $GITHUB_OUTPUT
         echo "project_name=$projectName" >> $GITHUB_OUTPUT
-        
-        echo "PROJECT_PATH=$relativePath" >> $env:GITHUB_ENV
-        echo "PROJECT_NAME=$projectName" >> $env:GITHUB_ENV
         
   build:
     name: Build Application
@@ -84,7 +75,6 @@ jobs:
       run: |
         echo "格式化代码..."
         dotnet format --verbosity minimal
-        echo "✅ 代码格式化完成"
         
     - name: Determine Version
       id: version
@@ -97,10 +87,8 @@ jobs:
         fi
         
         VERSION=$(echo $VERSION | sed 's/^v//')
-        
         echo "VERSION=$VERSION" >> $GITHUB_ENV
         echo "version=$VERSION" >> $GITHUB_OUTPUT
-        
         echo "构建版本: $VERSION"
         
     - name: Restore dependencies
@@ -111,13 +99,7 @@ jobs:
     - name: Build application
       run: |
         echo "构建应用程序..."
-        dotnet build "${{ needs.locate-project.outputs.project_path }}" `
-          --configuration ${{ env.CONFIGURATION }} `
-          -p:Version=${{ env.VERSION }} `
-          -p:FileVersion=${{ env.VERSION }} `
-          --no-restore
-        
-        echo "✅ 构建成功"
+        dotnet build "${{ needs.locate-project.outputs.project_path }}" --configuration ${{ env.CONFIGURATION }} -p:Version=${{ env.VERSION }} -p:FileVersion=${{ env.VERSION }} --no-restore
         
     - name: Publish application
       run: |
@@ -126,41 +108,42 @@ jobs:
         # 创建输出目录
         $artifactsDir = "./artifacts"
         $outputDir = "$artifactsDir/${{ env.PROJECT_NAME }}"
-        
         New-Item -ItemType Directory -Path $outputDir -Force
         
         # 发布应用程序
-        dotnet publish "${{ needs.locate-project.outputs.project_path }}" `
-          --configuration ${{ env.CONFIGURATION }} `
-          -p:Version=${{ env.VERSION }} `
-          -p:FileVersion=${{ env.VERSION }} `
-          --output $outputDir `
-          --no-restore
+        dotnet publish "${{ needs.locate-project.outputs.project_path }}" --configuration ${{ env.CONFIGURATION }} -p:Version=${{ env.VERSION }} -p:FileVersion=${{ env.VERSION }} --output $outputDir --no-restore
+        
+        # 检查发布结果
+        if ($LASTEXITCODE -eq 0) {
+          echo "✅ 发布成功"
+        } else {
+          echo "❌ 发布失败"
+          exit 1
+        }
         
         # 创建ZIP包
         $zipName = "${{ env.PROJECT_NAME }}-${{ env.VERSION }}.zip"
-        Compress-Archive -Path "$outputDir/*" `
-          -DestinationPath "$artifactsDir/$zipName" `
-          -Force
+        Compress-Archive -Path "$outputDir/*" -DestinationPath "$artifactsDir/$zipName" -Force
         
-        echo "✅ 发布完成"
         echo "📦 ZIP文件: $zipName"
         
-        # 显示生成的文件信息
-        echo "`n=== 生成的文件列表 ==="
+        # 显示文件信息
         $exeFiles = Get-ChildItem $outputDir -Filter "*.exe"
         if ($exeFiles.Count -gt 0) {
           echo "可执行文件:"
           foreach ($exe in $exeFiles) {
-            echo "  - $($exe.Name) ($([math]::Round($exe.Length/1KB, 2)) KB)"
+            $sizeKB = [math]::Round($exe.Length/1KB, 2)
+            echo "  - $($exe.Name) (${sizeKB} KB)"
           }
         }
         
-        $totalFiles = (Get-ChildItem $outputDir -File -Recurse).Count
-        $totalSize = (Get-ChildItem $outputDir -File -Recurse | Measure-Object -Property Length -Sum).Sum
-        echo "`n📊 发布包统计:"
-        echo "  文件总数: $totalFiles"
-        echo "  总大小: $([math]::Round($totalSize/1MB, 2)) MB"
+        $allFiles = Get-ChildItem $outputDir -File -Recurse
+        if ($allFiles.Count -gt 0) {
+          $totalSize = ($allFiles | Measure-Object -Property Length -Sum).Sum
+          $totalSizeMB = [math]::Round($totalSize/1MB, 2)
+          echo "文件总数: $($allFiles.Count)"
+          echo "总大小: ${totalSizeMB} MB"
+        }
         
     - name: Create release notes
       run: |
@@ -194,9 +177,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: build-artifacts
-        path: |
-          ./artifacts/
-        retention-days: 90
+        path: ./artifacts/
         
   create-release:
     name: Create GitHub Release
@@ -228,8 +209,6 @@ jobs:
         
         echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
         echo "prerelease=$PRERELEASE" >> $GITHUB_OUTPUT
-        
-        echo "创建发布: $TAG_NAME"
         
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1

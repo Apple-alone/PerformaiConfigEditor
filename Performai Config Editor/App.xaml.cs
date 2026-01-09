@@ -2,7 +2,7 @@
 using System.Data;
 using System.Windows;
 
-namespace SegaGame_Config_Master
+namespace Performai_Config_Editor
 {
     /// <summary>
     /// Interaction logic for App.xaml
